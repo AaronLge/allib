@@ -972,6 +972,45 @@ def save_figs_as_pdf(FIG, filename, **kwargs):
     return
 
 
+import numpy as np
+
+
+# def make_monotone(x, increasing=True):
+#     """Modifies an input sequence (either a Python list or a NumPy array) to make it monotone, ensuring that the sequence is either non-decreasing (monotone increasing) or non-increasing (monotone decreasing) based on an optional parameter.
+#
+#     Parameters:
+#     x (list or numpy.ndarray):
+#         The input sequence to be modified. This can be either a Python list or a NumPy array containing numeric elements.
+#
+#     increasing (bool, optional):
+#         A boolean flag that determines the desired monotonicity of the sequence:
+#         True (default): Modifies the sequence to be monotone increasing, where each element is at least as large as the one before it.
+#         False: Modifies the sequence to be monotone decreasing, where each element is at most as large as the one before it.
+#
+#     Returns:
+#     numpy.ndarray:
+#         A NumPy array containing the modified sequence, either monotone increasing or decreasing based on the increasing parameter. The modification is done in place, meaning the original sequence is altered."""
+#
+#     # Convert to a NumPy array if it isn't one already
+#     arr = np.array(x, copy=False)
+#
+#     # Iterate over the array starting from the second element
+#     for i in range(1, len(arr)):
+#         if np.isnan(arr[i]):  # Skip NaN values
+#             continue
+#
+#         if increasing:
+#             # For monotone increasing, replace current element if it's smaller than the previous one
+#             if i > 0 and not np.isnan(arr[i - 1]) and arr[i] < arr[i - 1]:
+#                 arr[i] = arr[i - 1]
+#         else:
+#             # For monotone decreasing, replace current element if it's larger than the previous one
+#             if i > 0 and not np.isnan(arr[i - 1]) and arr[i] > arr[i - 1]:
+#                 arr[i] = arr[i - 1]
+#
+#     return arr
+
+
 def make_monotone(x, increasing=True):
     """modifies an input sequence (either a Python list or a NumPy array) to make it monotone, ensuring that the sequence is either non-decreasing (monotone increasing) or non-increasing (monotone decreasing) based on an optional parameter.
 
@@ -1151,9 +1190,6 @@ def filter_df_cols_by_keywords(df, keywords):
     filtered_df = df.loc[:, mask]
 
     return filtered_df
-
-
-import pandas as pd
 
 
 def save_df_list_to_excel(path, dfs, sheet_names=None):
@@ -1575,4 +1611,105 @@ def check_meta_in_valid_db(db_path, Meta):
     return idx_in_meta
 
 
-    
+import pandas as pd
+
+
+def median_sample_rate(index) -> pd.Timedelta:
+    """
+    Calculate the median sample rate of a series of datetime objects.
+
+    The sample rate is determined by the median of the time differences
+    between consecutive datetime values.
+
+    Parameters:
+    index (Union[pd.DatetimeIndex, List[pd.Timestamp]]): A pandas DatetimeIndex or a list of datetime objects.
+
+    Returns:
+    pd.Timedelta: The median sample rate as a Timedelta object.
+    """
+    # Convert list of datetime objects to DatetimeIndex if necessary
+    if isinstance(index, list):
+        index = pd.DatetimeIndex(index)
+
+    # Calculate the time differences between consecutive datetime values
+    time_diffs = pd.Series(index).diff().dropna()
+
+    # Calculate the median sample rate and convert it to a Timedelta
+    median_diff = time_diffs.median()
+
+    return median_diff
+
+def fill_nans_constant(x_vector, mask=None):
+    """
+    Fills NaN values in x_vector using the last non-NaN value,
+    using a boolean mask to determine where to fill.
+    If no mask is provided, it assumes all values are to be filled.
+
+    Parameters:
+    x_vector (np.ndarray): The input vector containing NaNs.
+    mask (np.ndarray, optional): A boolean mask of the same length as x_vector.
+                                 Defaults to an array of True values.
+
+    Returns:
+    np.ndarray: The x_vector with NaNs filled according to the mask.
+
+    Notes:
+    - If the x_vector starts with NaNs and the mask is all True, those NaNs will be filled with the fist not nan value unfilled.
+    - If the mask is not provided, all NaNs will be filled with the last valid value encountered.
+    """
+    if mask is None:
+        mask = np.ones_like(x_vector, dtype=bool)  # Create a mask of all True
+
+    filled_vector = np.copy(x_vector)
+    last_valid = None
+    leading_nan = True
+    i_leading_nan = 0
+
+    for i in range(len(filled_vector)):
+        if mask[i]:  # Only fill if the mask is True
+            if np.isnan(filled_vector[i]):
+                if leading_nan:
+                    i_leading_nan += 1
+
+                if last_valid is not None:
+                    filled_vector[i] = last_valid
+            else:
+                last_valid = filled_vector[i] # Update last valid value
+                if leading_nan:
+                    filled_vector[i-i_leading_nan:i] = last_valid
+                    leading_nan = False
+
+
+        else:
+            # If mask is False, do not fill and reset last_valid
+            last_valid = None if np.isnan(filled_vector[i]) else filled_vector[i]
+
+    return filled_vector
+
+
+
+def fill_nan_with_linspace(vector):
+    # Convert the input to a NumPy array if it's not already one
+    vector = np.asarray(vector)
+
+    # Find the indices of non-NaN values
+    non_nan_indices = np.where(~np.isnan(vector))[0]
+
+    # Check if there are at least two non-NaN values
+    if len(non_nan_indices) < 2:
+        raise ValueError("At least two non-NaN values are required to perform linear interpolation.")
+
+    # Get the first and last non-NaN values
+    start_value = vector[non_nan_indices[0]]
+    end_value = vector[non_nan_indices[-1]]
+
+    # Create an array of the same length as the original
+    filled_vector = np.copy(vector)
+
+    # Generate linearly spaced values
+    linspace_values = np.linspace(start_value, end_value, num=len(vector))
+
+    # Fill in the NaN values
+    filled_vector[np.isnan(vector)] = linspace_values[np.isnan(vector)]
+
+    return filled_vector

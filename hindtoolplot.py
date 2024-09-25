@@ -398,7 +398,11 @@ def plot_tiled(Tiles, **kwargs):
                                 cbar = plt.colorbar(mappable=cmappable, ax=ax_yy)
 
                                 for tick_label in cbar.ax.yaxis.get_ticklabels():
-                                    tick_label.set_fontsize(7)
+                                    tick_label.set_fontsize(fontsize_ticks)
+
+                                offset_text = cbar.ax.yaxis.get_offset_text()
+                                if offset_text.get_text():  # If there is an offset (i.e., text is not empty)
+                                    offset_text.set_fontsize(fontsize_ticks)
 
                                 if scatter.cbar_label is not None:
                                     if scatter.cbar_label_fontsize is None:
@@ -480,17 +484,6 @@ def plot_tiled(Tiles, **kwargs):
                                                    header=text.header
                                                    )
 
-                    # change global axis colors if specified
-                    update_axis_colors_ticksize_axlabels(axis,
-                                                         color_left=Tile.spinecolor_left,
-                                                         color_right=Tile.spinecolor_right,
-                                                         ticksize_left=fontsize_ticks,
-                                                         ticksize_right=fontsize_ticks,
-                                                         label_left=Tile.y_label,
-                                                         label_right=Tile.y_label_right,
-                                                         label_size_left=fontsize_label,
-                                                         label_size_right=fontsize_label)
-
                     if x_min is not None: axis.set_xlim(left=x_min)
                     if x_max is not None: axis.set_xlim(right=x_max)
                     if y_min is not None: axis.set_ylim(bottom=y_min)
@@ -506,6 +499,19 @@ def plot_tiled(Tiles, **kwargs):
                         axis.set_xlabel(Tile.x_label, fontsize=fontsize_label)
                     if Tile.y_label is not None:
                         axis.set_ylabel(Tile.y_label, fontsize=fontsize_label)
+
+                    # change global axis colors if specified
+                    update_axis_colors_ticksize_axlabels(axis,
+                                                         color_left=Tile.spinecolor_left,
+                                                         color_right=Tile.spinecolor_right,
+                                                         ticksize_left=fontsize_ticks,
+                                                         ticksize_right=fontsize_ticks,
+                                                         label_left=Tile.y_label,
+                                                         label_right=Tile.y_label_right,
+                                                         label_size_left=fontsize_label,
+                                                         label_size_right=fontsize_label,
+                                                         sci_label_size_left=fontsize_ticks,
+                                                         sci_label_size_right=fontsize_ticks)
 
                     # legend
                     _, labels = axis.get_legend_handles_labels()
@@ -957,7 +963,22 @@ def get_yyaxis(ax, side='right', color=None):
     return side_ax
 
 
-def update_axis_colors_ticksize_axlabels(ax, color_left=None, color_right=None, ticksize_left=None, ticksize_right=None, label_left=None, label_right=None, label_size_left=None, label_size_right=None):
+import matplotlib.pyplot as plt
+import numpy as np
+
+def update_axis_colors_ticksize_axlabels(
+    ax,
+    color_left=None,
+    color_right=None,
+    ticksize_left=None,
+    ticksize_right=None,
+    label_left=None,
+    label_right=None,
+    label_size_left=None,
+    label_size_right=None,
+    sci_label_size_left=None,  # New parameter for scientific notation label size
+    sci_label_size_right=None   # New parameter for scientific notation label size
+):
     """
     Updates the colors of the left and/or right y-axis spines, ticks, and labels.
     If the axis on one side does not exist, it will not modify or create a new one.
@@ -971,9 +992,21 @@ def update_axis_colors_ticksize_axlabels(ax, color_left=None, color_right=None, 
     color_right : str or None, optional
         The color to apply to the right y-axis spine, ticks, and labels. If None, the right axis is not modified. Default is None.
     ticksize_left : int or None, optional
-        The ticksize to apply to the left y-axis spine, ticks, and labels. If None, the right axis is not modified. Default is None.
-     ticksize_right : int or None, optional
+        The ticksize to apply to the left y-axis spine, ticks, and labels. If None, the left axis is not modified. Default is None.
+    ticksize_right : int or None, optional
         The ticksize to apply to the right y-axis spine, ticks, and labels. If None, the right axis is not modified. Default is None.
+    label_left : str or None, optional
+        The label for the left y-axis. Default is None (no label).
+    label_right : str or None, optional
+        The label for the right y-axis. Default is None (no label).
+    label_size_left : int or None, optional
+        Font size for the left y-axis label. Default is None (use current size).
+    label_size_right : int or None, optional
+        Font size for the right y-axis label. Default is None (use current size).
+    sci_label_size_left : int or None, optional
+        Font size for scientific notation labels on the left y-axis. Default is None (use current size).
+    sci_label_size_right : int or None, optional
+        Font size for scientific notation labels on the right y-axis. Default is None (use current size).
 
     Returns:
     --------
@@ -987,13 +1020,28 @@ def update_axis_colors_ticksize_axlabels(ax, color_left=None, color_right=None, 
         ax.tick_params(axis='y', colors=color_left)
 
     if label_left:
+        # Set the y-axis label with appropriate parameters
         if color_left:
             ax.set_ylabel(label_left, fontsize=label_size_left, color=color_left)
         else:
-            ax.set_ylabel(label_left, fontsize=label_size_left)
+            ax.set_ylabel(label_left, fontsize=label_size_left)  # Omit color parameter if None
 
     if ticksize_left:
         ax.tick_params(axis='both', which='major', labelsize=ticksize_left)
+        offset_text = ax.yaxis.get_offset_text()
+        if offset_text.get_text():
+            offset_text.set_fontsize(ticksize_left)
+
+    # Check for scientific notation on the left axis by looking at the tick labels
+    if any('e' in tick.get_text() or 'E' in tick.get_text() for tick in ax.get_yticklabels()):
+        # Set the font size for the scientific notation labels
+        if sci_label_size_left is not None:
+            for tick in ax.get_yticklabels():
+                tick.set_fontsize(sci_label_size_left)
+            offset_text = ax.yaxis.get_offset_text()
+            if offset_text.get_text():
+                offset_text.set_fontsize(sci_label_size_left)
+
     # Check for the existence of a right-side secondary axis
     for child in ax.figure.get_axes():
         if child != ax and ax.get_shared_x_axes().joined(ax, child):
@@ -1002,14 +1050,96 @@ def update_axis_colors_ticksize_axlabels(ax, color_left=None, color_right=None, 
                 child.spines['right'].set_color(color_right)
                 child.yaxis.label.set_color(color_right)
                 child.tick_params(axis='y', colors=color_right)
+
             if ticksize_right:
                 child.tick_params(axis='both', which='major', labelsize=ticksize_right)
+
             if label_right:
+                # Set the y-axis label for the right axis
                 if color_right:
                     child.set_ylabel(label_right, fontsize=label_size_right, color=color_right)
                 else:
-                    child.set_ylabel(label_right, fontsize=label_size_right)
+                    child.set_ylabel(label_right, fontsize=label_size_right)  # Omit color parameter if None
+
+            offset_text = child.yaxis.get_offset_text()
+            if offset_text.get_text():
+                offset_text.set_fontsize(ticksize_right)
+
+            # Check for scientific notation on the right axis by looking at the tick labels
+            if any('e' in tick.get_text() or 'E' in tick.get_text() for tick in child.get_yticklabels()):
+                # Set the font size for the scientific notation labels
+                if sci_label_size_right is not None:
+                    for tick in child.get_yticklabels():
+                        tick.set_fontsize(sci_label_size_right)
+                    offset_text = child.yaxis.get_offset_text()
+                    if offset_text.get_text():
+                        offset_text.set_fontsize(sci_label_size_right)
+
             break  # Exit the loop if the right axis is found
+
+# def update_axis_colors_ticksize_axlabels(ax, color_left=None, color_right=None, ticksize_left=None, ticksize_right=None, label_left=None, label_right=None, label_size_left=None, label_size_right=None):
+#     """
+#     Updates the colors of the left and/or right y-axis spines, ticks, and labels.
+#     If the axis on one side does not exist, it will not modify or create a new one.
+#
+#     Parameters:
+#     -----------
+#     ax : matplotlib.axes.Axes
+#         The primary axis whose y-axis colors will be updated.
+#     color_left : str or None, optional
+#         The color to apply to the left y-axis spine, ticks, and labels. If None, the left axis is not modified. Default is None.
+#     color_right : str or None, optional
+#         The color to apply to the right y-axis spine, ticks, and labels. If None, the right axis is not modified. Default is None.
+#     ticksize_left : int or None, optional
+#         The ticksize to apply to the left y-axis spine, ticks, and labels. If None, the right axis is not modified. Default is None.
+#      ticksize_right : int or None, optional
+#         The ticksize to apply to the right y-axis spine, ticks, and labels. If None, the right axis is not modified. Default is None.
+#
+#     Returns:
+#     --------
+#     None
+#     """
+#     # Update left axis color if specified
+#     if color_left:
+#         ax.spines['left'].set_visible(True)
+#         ax.spines['left'].set_color(color_left)
+#         ax.yaxis.label.set_color(color_left)
+#         ax.tick_params(axis='y', colors=color_left)
+#
+#     if label_left:
+#         if color_left:
+#             ax.set_ylabel(label_left, fontsize=label_size_left, color=color_left)
+#         else:
+#             ax.set_ylabel(label_left, fontsize=label_size_left)
+#
+#     if ticksize_left:
+#         ax.tick_params(axis='both', which='major', labelsize=ticksize_left)
+#         offset_text = ax.yaxis.get_offset_text()
+#         if offset_text.get_text():
+#             offset_text.set_fontsize(ticksize_left)
+#
+#     # Check for the existence of a right-side secondary axis
+#     for child in ax.figure.get_axes():
+#         if child != ax and ax.get_shared_x_axes().joined(ax, child):
+#             # Update right axis color if specified and if the secondary axis exists
+#             if color_right:
+#                 child.spines['right'].set_color(color_right)
+#                 child.yaxis.label.set_color(color_right)
+#                 child.tick_params(axis='y', colors=color_right)
+#             if ticksize_right:
+#                 child.tick_params(axis='both', which='major', labelsize=ticksize_right)
+#             if label_right:
+#                 if color_right:
+#                     child.set_ylabel(label_right, fontsize=label_size_right, color=color_right)
+#                 else:
+#                     child.set_ylabel(label_right, fontsize=label_size_right)
+#
+#             offset_text = ax.yaxis.get_offset_text()
+#             if offset_text.get_text():
+#                 offset_text.set_fontsize(ticksize_right)
+#
+#
+#             break  # Exit the loop if the right axis is found
 
 #%% macros:
 
@@ -1027,9 +1157,9 @@ def plot_table_condesation(Segments, figsize=(8.268, 11.693), titel=None):
     for i, Seg in enumerate(Segments.result):
 
         data.append(Seg.result["value"].values)
-        not_nan = ~np.isnan(Seg.result["value"])
+        is_condensation = Seg.result["iscondensation"]
         isdata = np.array(Seg.result["isdata"])
-        grey_curr = [isdata_curr or not_nan_curr for (isdata_curr, not_nan_curr) in zip(isdata, not_nan.values)]
+        grey_curr = [isdata_curr & not_nan_curr for (isdata_curr, not_nan_curr) in zip(isdata, is_condensation)]
         grey_curr = [~curr for curr in grey_curr]
 
         grey.append(grey_curr)

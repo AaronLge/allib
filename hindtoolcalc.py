@@ -76,7 +76,7 @@ class Calculation:
         self.basedata["dbdate"] = None
         self.basedata["db_timeframe"] = [df.index[0], df.index[-1]]
         self.basedata["N_rows"] = len(df)
-        self.basedata["sample_rate"] = df.index[1] - df.index[0]
+        self.basedata["sample_rate"] = gl.median_sample_rate(df.index)
 
         if indizes is None:
             self.basedata["indizes"] = df.index
@@ -167,7 +167,6 @@ class Calculation:
                     underscore = (f"samples: {N_exp:.2e} ({round(N_exp / N_ges * 100, 1)}%), " +
                                   f"timeframe: {timeframe[0].round('1d').date()} to {timeframe[1].round('1d').date()}, " +
                                   f"time step: {sample_rate.total_seconds()} s")
-
             elif mode == "standard":
                 N_ges = self.basedata["N_rows"]
 
@@ -185,8 +184,7 @@ class Calculation:
             if underscore is not None:
                 titles.append(header + "\n" + underscore)
             else:
-                titles.append(header)
-
+                titles = header
         return titles
 
     def load_from_db(self, column_names=None, applie_filt=True, colnames_ini=False, **kwargs):
@@ -226,31 +224,35 @@ def percentiles(df, percent: list):
     return
 
 
-def condensation(x, y, grid, **kwargs):
-    # todo: berschreibung!
-    reg_model = kwargs.get('reg_model', 'poly')
-    deg_reg = kwargs.get('deg_reg', 3)
-    cut_reg = kwargs.get('cut_reg', 0)
-    reg_weighting = kwargs.get('reg_weighting', 0)
-    line_plot_zone = kwargs.get('line_plot_zone', [None, None])
-    reg_zone = kwargs.get('reg_zone', [None, None])
-    perc = kwargs.get('percentiles', [])
-    bin_min = kwargs.get('bin_min', 0)
-    perc_mean = kwargs.get('perc_mean', 50)
-    avrg_method = kwargs.get('avrg_method', 'mean')
-    make_monotone = kwargs.get("make_monotone", False)
+def condensation(x, y, grid,
+                 reg_model='poly',
+                 deg_reg=3,
+                 cut_reg=0,
+                 reg_weighting=0,
+                 zone_reg=None,
+                 zone_line=None,
+                 perc=None,
+                 bin_min=0,
+                 perc_mean=50,
+                 avrg_method='mean',
+                 make_monotone=False):
 
-    if reg_zone[1] is None:
-        reg_zone[1] = max(x)
+    # Set default values if None is passed
+    zone_reg = zone_reg if zone_reg is not None else [None, None]
+    zone_line = zone_line if zone_line is not None else [None, None]
+    perc = perc if perc is not None else []
 
-    if reg_zone[0] is None:
-        reg_zone[0] = min(x)
+    if zone_reg[1] is None:
+        zone_reg[1] = max(x)
 
-    if line_plot_zone[1] is None:
-        line_plot_zone[1] = max(x)
+    if zone_reg[0] is None:
+        zone_reg[0] = min(x)
 
-    if line_plot_zone[0] is None:
-        line_plot_zone[0] = min(x)
+    if zone_line[1] is None:
+        zone_line[1] = max(x)
+
+    if zone_line[0] is None:
+        zone_line[0] = min(x)
 
     n_bin = len(grid) - 1
     x_zone = [min(grid), max(grid)]
@@ -268,8 +270,12 @@ def condensation(x, y, grid, **kwargs):
         z = sc.stats.norm.ppf(perc_mean / 100)
         OUT['mean'] = OUT['mean'] + z * OUT['std']
 
+    #zone plot
+    plot_line = (OUT['x'] > zone_line[0]) & (
+            OUT['x'] < zone_line[1])
+
     if make_monotone:
-        OUT['mean'] = gl.make_monotone(OUT['mean'])
+        OUT.loc[plot_line & ~np.isnan( OUT['mean']), 'mean'] = gl.make_monotone(OUT.loc[plot_line & ~np.isnan( OUT['mean']), 'mean'])
 
     OUT['isData'] = 1
     OUT.loc[OUT['count'] <= bin_min, 'isData'] = 0
@@ -301,22 +307,21 @@ def condensation(x, y, grid, **kwargs):
     # regressionsbereich
     OUT['bool_reg_zone'] = 0
 
-    OUT.loc[(OUT['x'] > reg_zone[0]) & (
-            OUT['x'] < reg_zone[1]), 'bool_reg_zone'] = 1
+    OUT.loc[(OUT['x'] > zone_reg[0]) & (
+            OUT['x'] < zone_reg[1]), 'bool_reg_zone'] = 1
 
     # regression plotbereich
     OUT['bool_reg_plot'] = 0
 
-    if line_plot_zone[1] is None:
+    # if zone_line[1] is None:
+    #
+    #     nanMask_temp = nanMask.copy()
+    #     nanMask_temp[min(np.where(nanMask == 1)[0]):max(np.where(nanMask == 1)[0])] = 1
+    #
+    #     OUT.loc[(OUT['x'] > zone_line[0]) & (
+    #             nanMask_temp == 1), 'bool_reg_plot'] = 1
 
-        nanMask_temp = nanMask.copy()
-        nanMask_temp[min(np.where(nanMask == 1)[0]):max(np.where(nanMask == 1)[0])] = 1
-
-        OUT.loc[(OUT['x'] > line_plot_zone[0]) & (
-                nanMask_temp == 1), 'bool_reg_plot'] = 1
-    else:
-        OUT.loc[(OUT['x'] > line_plot_zone[0]) & (
-                OUT['x'] < line_plot_zone[1]), 'bool_reg_plot'] = 1
+    OUT.loc[plot_line, 'bool_reg_plot'] = 1
 
     col_key = [
         col for col in OUT.columns if 'mean' in col or 'percentile' in col]
@@ -349,7 +354,7 @@ def condensation(x, y, grid, **kwargs):
 
         OUT[f'{name} result plot'] = float('nan')
 
-        OUT.loc[OUT['bool_reg_plot'] == 1, f'{name} result plot'] = OUT.loc[OUT['bool_reg_plot'] == 1, f'{name} result']
+        OUT.loc[(OUT['bool_reg_plot'].values == 1) & (plot_line), f'{name} result plot'] = OUT.loc[(OUT['bool_reg_plot'].values == 1) & (plot_line), f'{name} result']
 
     return OUT
 
@@ -381,7 +386,7 @@ def quantiles(perc_low, middle, perc_up, quant_low, quant_up):
 
     except:
         print(
-            f"    quantile not possible for segment, check if graph is monotone in 'line_plot_zone' or if percentiles cross in the frequency band. quantile is set to mean")
+            f"    quantile not possible for segment, check if graph is monotone in 'zone_line' or if percentiles cross in the frequency band. quantile is set to mean")
 
     return quantile
 
@@ -1074,42 +1079,122 @@ def weibull_fit(x):
     return bin_size, center, prob, weibull, params
 
 
-# %% macro functions
-def calc_VMHS(Vm, Hs, angle, angle_grid, colidents=None, **kwargs):
-    """retruns list of VMHS segment objects for all segments in angle_grid, if angle_grid is None, omnidirectional is returned
 
-    Arguments:
-        Vm: Series, Wind-Speed data, index is stored in Segment.indize Object to link used data, Datetime format recomended, Series Name is saved in Segment.colnames['x']
-        Hs: Series, Wave-Height data, same index as Vm required, Series Name is saved in Segment.colnames['y']
-        angle: Series, Wave-Height data, same index as Vm required, Series Name is saved in Segment.angle_name
-        angle_grid: List of List (,2) with angle pairs discribing the edges of the segments, if None, omnidirectional is returned
+def cross_correlation(VM_grid, HS_values, HS_grid, TP_values, fill_range=None):
+    """"does a cross correlation between the VMHS HS_values(VM_grid) and HSTP TP_values(HS_grid)
+    the resulting VMTP TP(VM) condensation the length of HSTP. "fill range" fills the not correlated values by setting TP constant in the specified range
 
-    optional:
-        N_grid: int, default: 100
-        weight_y: bool, default: False
-        deg_reg: int, default: 3
-        model_reg: str, int, default: 'poly'
-        cut_reg: int, default: 0
-        weighting_reg: int, default: 0
-        zone_reg: list, default: [None,None]
-        zone_line: list, default: [None,None]
-        bin_min: int, default: 0
+    paramters:
+    VM_grid, HS_values: numpy array, same length, can contain nans and dobble values, is expected to be (non strictyl) INCEASING in both vektors
+    HS_grid, TP_values, fill_range: numpy array, same length, can contain nans and dobble values, dont has to be increasing!
+    fill_range: Series, lenght of HS_grid/TP_values conatining the vm-infomation of the new VMTP as index and a bool for desired filling, no holes!
+
 
     return:
-        Data_Out: list of segment objects
+    Vm_res, TP_res: numpy arrays containing the new correlation
     """
 
-    N_grid = kwargs.get('N_grid', 100)
-    deg_reg = kwargs.get('deg_reg', 3)
-    model_reg = kwargs.get('model_reg', 'poly')
-    cut_reg = kwargs.get('cut_reg', 0)
-    weighting_reg = kwargs.get('weighting_reg', 0)
-    zone_reg = kwargs.get('zone_reg', [None, None])
-    zone_line = kwargs.get('zone_line', [None, None])
-    bin_min = kwargs.get('bin_min', 0)
-    perc_mean = kwargs.get('perc_mean', 50)
-    avrg_method = kwargs.get('avrg_method', 'mean')
-    make_monotone = kwargs.get('make_monotone', 'mean')
+
+    is_data_HSTP = ~np.isnan(HS_grid)
+
+    TP_res = np.empty(len(TP_values))
+    TP_res[:] = float('nan')
+
+    Vm_res = np.empty(len(TP_values))
+    Vm_res[:] = float('nan')
+
+    # Handle NaNs in x vector
+    HS_values = gl.fill_nans_constant(HS_values)
+
+    # handle duplicate HS_values in a row
+    # Find indices of duplicate x values
+    _, unique_indices = np.unique(HS_values, return_index=True)
+    duplicates = set(range(len(HS_values))) - set(unique_indices)
+
+    # Remove duplicate x values and corresponding y values for interpolation
+    HS_unique = np.delete(HS_values, list(duplicates))
+    VM_unique = np.delete(VM_grid, list(duplicates))
+
+    # Perform interpolation on unique values
+    Vm_res = np.interp(HS_grid, HS_unique, VM_unique, left=float('nan'), right=float('nan'))
+
+    TP_res[np.where(~np.isnan(Vm_res))[0]] = TP_values[np.where(~np.isnan(Vm_res))[0]]
+
+    # fill not interpolated values to data limits
+    if fill_range is not None:
+        idx_data_left = np.where(fill_range.values)[0][0]
+        idx_data_right = np.where(fill_range.values)[0][-1]
+
+        idx_interp_left = np.where(~np.isnan(Vm_res))[0][0]
+        idx_interp_right = np.where(~np.isnan(Vm_res))[0][-1]
+
+        # fill TP_res with constant
+        TP_res[idx_data_left:idx_interp_left] = TP_res[idx_interp_left]
+        TP_res[idx_interp_right:idx_data_right] = TP_res[idx_interp_right]
+
+        # fill Vm_res with linspaces
+        Vm_grid_VMTP = fill_range.index
+        Vm_data_left = Vm_grid_VMTP[idx_data_left]
+        Vm_data_right = Vm_grid_VMTP[idx_data_right]
+
+        Vm_interp_left = Vm_res[idx_interp_left]
+        Vm_interp_right = Vm_res[idx_interp_right]
+
+        Vm_res[idx_data_left:idx_interp_left] = np.linspace(Vm_data_left, Vm_interp_left, idx_interp_left - idx_data_left)
+        Vm_res[idx_interp_right:idx_data_right] = np.linspace(Vm_interp_right, Vm_data_right, idx_data_right - idx_interp_right)
+
+    return Vm_res, TP_res
+
+# %% macro functions
+def calc_VMHS(Vm, Hs, angle, angle_grid,
+              N_grid=100,
+              weight_y=False,
+              deg_reg=3,
+              model_reg='poly',
+              cut_reg=0,
+              weighting_reg=0,
+              zone_reg=None,
+              zone_line=None,
+              bin_min=0,
+              perc_mean=50,
+              avrg_method='mean',
+              make_monotone=False):
+    """Returns a list of VMHS segment objects for all segments in angle_grid.
+    If angle_grid is None, omnidirectional is returned.
+
+    Arguments:
+        Vm: Series, Wind-Speed data; index is stored in Segment.indize Object
+            to link used data. Datetime format recommended; Series Name is saved
+            in Segment.colnames['x'].
+        Hs: Series, Wave-Height data; same index as Vm required; Series Name is
+            saved in Segment.colnames['y'].
+        angle: Series, Angle data; same index as Vm required; Series Name is
+            saved in Segment.angle_name.
+        angle_grid: List of List (,2) with angle pairs describing the edges
+            of the segments; if None, omnidirectional is returned.
+
+    Optional:
+        N_grid: int, default: 100.
+        weight_y: bool, default: False.
+        deg_reg: int, default: 3.
+        model_reg: str, default: 'poly'.
+        cut_reg: int, default: 0.
+        weighting_reg: int, default: 0.
+        zone_reg: list, default: [None, None].
+        zone_line: list, default: [None, None].
+        bin_min: int, default: 0.
+        perc_mean: int, default: 50.
+        avrg_method: str, default: 'mean'.
+        make_monotone: str, default: 'mean'.
+
+    Returns:
+        Data_Out: list of segment objects.
+    """
+
+    # Ensure default values for mutable parameters
+    zone_reg = zone_reg if zone_reg is not None else [None, None]
+    zone_line = zone_line if zone_line is not None else [None, None]
+
 
     Data_Out = []
     grid = np.linspace(0, max(Vm), N_grid + 1)
@@ -1118,13 +1203,12 @@ def calc_VMHS(Vm, Hs, angle, angle_grid, colidents=None, **kwargs):
         # omni
         df = pd.concat([Vm, Hs], axis=1)
         VMHS_DATA = condensation(df[Vm.name], df[Hs.name], grid,
-                                 N_grid=N_grid,
+                                 reg_model=model_reg,
                                  deg_reg=deg_reg,
-                                 model_reg=model_reg,
                                  cut_reg=cut_reg,
-                                 weighting_reg=weighting_reg,
-                                 zone_reg=zone_reg,
-                                 zone_line=zone_line,
+                                 reg_weighting=weighting_reg,
+                                 zone_reg=zone_reg.copy(),  # Pass the list directly
+                                 zone_line=zone_line.copy(),  # Pass the list directly
                                  bin_min=bin_min,
                                  perc_mean=perc_mean,
                                  avrg_method=avrg_method,
@@ -1143,16 +1227,19 @@ def calc_VMHS(Vm, Hs, angle, angle_grid, colidents=None, **kwargs):
         # Grid festlegen
 
         for angle_segment in angle_grid:
+            # Make copies of the mutable parameters to avoid overwriting
+
+
             df = pd.concat([Vm, Hs, angle], axis=1)
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
 
             VMHS_DATA = condensation(df_filt[Vm.name], df_filt[Hs.name], grid,
                                      deg_reg=deg_reg,
-                                     model_reg=model_reg,
+                                     reg_model=model_reg,
                                      cut_reg=cut_reg,
-                                     weighting_reg=weighting_reg,
-                                     zone_reg=zone_reg,
-                                     zone_line=zone_line,
+                                     reg_weighting=weighting_reg,
+                                     zone_reg=zone_reg.copy(),
+                                     zone_line=zone_line.copy(),
                                      bin_min=bin_min,
                                      perc_mean=perc_mean,
                                      avrg_method=avrg_method,
@@ -1204,7 +1291,7 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
     perc = kwargs.get('percentiles', [33, 66])
     perc_mean = kwargs.get('perc_mean', 50)
     avrg_method = kwargs.get('avrg_method', 'mean')
-    make_monotone = kwargs.get('make_monotone', 'mean')
+    make_monotone = kwargs.get('make_monotone', False)
 
     Data_Out = []
 
@@ -1215,13 +1302,13 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
         # omni
         Table_cond = condensation(Hs, Tp, grid,
                                   deg_reg=deg_reg,
-                                  model_reg=model_reg,
+                                  reg_model=model_reg,
                                   cut_reg=cut_reg,
-                                  weighting_reg=weighting_reg,
-                                  zone_reg=zone_reg,
-                                  zone_line=zone_line,
+                                  reg_weighting=weighting_reg,
+                                  zone_reg=zone_reg.copy(),
+                                  zone_line=zone_line.copy(),
                                   bin_min=bin_min,
-                                  percentiles=perc,
+                                  perc=perc,
                                   perc_mean=perc_mean,
                                   avrg_method=avrg_method,
                                   make_monotone=make_monotone
@@ -1252,15 +1339,14 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
 
             Table_cond = condensation(df_filt[Hs.name], df_filt[Tp.name], grid,
-                                      N_grid=N_grid,
                                       deg_reg=deg_reg,
-                                      model_reg=model_reg,
+                                      reg_model=model_reg,
                                       cut_reg=cut_reg,
-                                      weighting_reg=weighting_reg,
-                                      zone_reg=zone_reg,
-                                      zone_line=zone_line,
+                                      reg_weighting=weighting_reg,
+                                      zone_reg=zone_reg.copy(),
+                                      zone_line=zone_line.copy(),
                                       bin_min=bin_min,
-                                      percentiles=perc,
+                                      perc=perc,
                                       perc_mean=perc_mean,
                                       avrg_method=avrg_method,
                                       make_monotone=make_monotone
@@ -1283,90 +1369,58 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
     return Data_Out
 
 
-def calc_VMTP(vmhs, hstp, fill_value_interp=False):
+def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
     """takes output from VMHS_calc und HSTP_calc (list of angle Sgements) and cross-correlates the results to get the VMTP correlation
     - Takes angle information from vmhs, assumes vmhs and hstp in fitting order of angle-segments!!
     - needs Segment.result object to be a pd.Dataframe with "mean result plot" and "x" in vmhs result dataframes and "x" and "mean result plot" or "quantile" in hstp dataframes ("quantile" overwrites "mean result plot")!)
     - indizes (from basedata) needs to be intialized for counts!
     """
 
-    def get_group_labels(series):
-        group_labels = (series != series.shift()).cumsum() * series
-        grouped = series.groupby(group_labels)
-        return grouped.groups[2], grouped.groups[4]
+    import matplotlib.pyplot as plt
 
     VMTP = []
     num = 0
-
     for vmhs_curr, hstp_curr in zip(vmhs, hstp):
+        vmtp_curr_data = pd.DataFrame()
 
         vmhs_curr_data = vmhs_curr.result
         hstp_curr_data = hstp_curr.result
-        vmtp_curr_data = pd.DataFrame()
-
         if "quantile" in hstp_curr_data.keys():
             key_tp = "quantile"
         else:
             key_tp = "mean result plot"
 
-        HS = vmhs_curr_data['mean result plot']
-        mask = ~np.isnan(HS)
-        nans = np.empty(len(HS))
-        nans[:] = np.nan
+        # VMHS
+        HS_values = vmhs_curr_data['mean result plot']
+        VM_grid = vmhs_curr_data['x']
 
-        VM_grid = pd.Series(nans)
-
-        VM_grid[mask] = vmhs_curr_data.loc[mask, 'x']
-
+        # HSTP
+        TP_values = hstp_curr_data[key_tp]
         HS_grid = hstp_curr_data['x']
 
-        VM_res = gl.interpolate_increasing_decreasing(HS_grid, HS[mask], VM_grid[mask])
+        # vm_grid aus vm_points
+        if vm_points is not None and fill_range:
+            vm_points_curr = vm_points[vmhs_curr.indizes]
+            grid = np.linspace(0, max(vm_points_curr), len(HS_grid) + 1)
+            count, vm_edges, _ = sc.stats.binned_statistic(vm_points_curr, vm_points_curr, statistic='count', bins=grid)
+            vm_grid = (vm_edges[:-1] + vm_edges[1:]) / 2
+            is_data = count != 0
 
-        if fill_value_interp:
+            first_data = np.where(is_data)[0][0]
+            last_data = np.where(is_data)[0][-1]
+            is_data[first_data:last_data] = True
 
-            vm_left_beg = VM_grid[mask].iloc[0]
-            vm_right_end = VM_grid[mask].iloc[-1]
-            vm_left_end = VM_res[~np.isnan(VM_res)][0]
-            vm_right_beg = VM_res[~np.isnan(VM_res)][-1]
-
-            Tp_res = hstp_curr_data.loc[:, key_tp].copy()
-            bool_const = ~np.isnan(Tp_res) & np.isnan(VM_res)
-
-            indx_lin_left, indx_lin_right = get_group_labels(bool_const)
-
-            Tp_res[indx_lin_left] = Tp_res.loc[~np.isnan(VM_res)].iloc[0]
-            Tp_res[indx_lin_right] = Tp_res.loc[~np.isnan(VM_res)].iloc[-1]
-
-            VM_res[indx_lin_left] = np.linspace(vm_left_beg, vm_left_end, len(indx_lin_left))
-            VM_res[indx_lin_right] = np.linspace(vm_right_beg, vm_right_end, len(indx_lin_right))
+            vm_grid = pd.Series(is_data, index=vm_grid)
 
         else:
-            Tp_res = hstp_curr_data.loc[~np.isnan(VM_res), key_tp].copy()
+            vm_grid = None
 
-        vmtp_curr_data['x'] = VM_res
+        Vm_res, TP_res = cross_correlation(VM_grid.values, HS_values,HS_grid.values, TP_values, fill_range=vm_grid)
 
-        vmtp_curr_data.loc[~np.isnan(VM_res), 'mean result plot'] = hstp_curr_data.loc[~np.isnan(VM_res), key_tp]
+        vmtp_curr_data['x'] = Vm_res
+        vmtp_curr_data['mean result plot'] = TP_res
 
-        col_name_vm = vmhs_curr.colnames['x']
-        col_name_hs = hstp_curr.colnames['y']
-        angle = vmhs_curr.angle_name
-        angles = vmhs_curr.angles
-
-       # look, if resulting VM_res was sucsessfull, when not, no correlation from VMHS can be found due to constant correlation
-        if len(np.where(~np.isnan(VM_res))[0]) < 3:
-            print(
-                f"   no correlation between Vm and Hs is found for section {vmhs_curr.angles}, Hs assumed constant over Vm (check if its the case, otherwise faulty result possible)")
-            VM_res[mask] = VM_grid[mask]
-            Hs_konst = np.mean(HS[mask])
-            Tp_const = np.interp(Hs_konst, hstp_curr_data['x'], hstp_curr_data[key_tp])
-            Tp_res = pd.Series(nans)
-            Tp_res.iloc[mask == True] = Tp_const
-
-        vmtp_curr_data['x'] = VM_res
-        vmtp_curr_data.loc[~np.isnan(
-            VM_res), 'mean plot'] = Tp_res
-
-        vmtp_curr = Segment(num, result=vmtp_curr_data, colnames={'x': col_name_vm, 'y': col_name_hs}, angle_name=angle, angles=angles, indizes=vmhs_curr.indizes)
+        vmtp_curr = Segment(num, result=vmtp_curr_data, colnames={'x': vmhs_curr.colnames['x'], 'y': hstp_curr.colnames['y']}, angle_name=vmhs_curr.angle_name, angles=vmhs_curr.angles, indizes=vmhs_curr.indizes)
 
         VMTP.append(vmtp_curr)
         num = num + 1
@@ -1520,6 +1574,7 @@ def calc_tables(vmhs, vm_grid, vm_data):
         result["value"] = HS
         result["isdata"] = isdata
         result["count"] = count_table
+        result["iscondensation"] = ~np.isnan(HS_VMHS)
 
         temp = Segment(i, angles=vmhs_curr.angles, result=result, colnames=vmhs_curr.colnames, indizes=index_vmhs_curr, angle_name=vmhs_curr.angle_name)
         VMHS_OUT.append(temp)
