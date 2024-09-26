@@ -184,7 +184,7 @@ class Calculation:
             if underscore is not None:
                 titles.append(header + "\n" + underscore)
             else:
-                titles = header
+                titles.append(header)
         return titles
 
     def load_from_db(self, column_names=None, applie_filt=True, colnames_ini=False, **kwargs):
@@ -1419,6 +1419,8 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
 
         vmtp_curr_data['x'] = Vm_res
         vmtp_curr_data['mean result plot'] = TP_res
+        vmtp_curr_data['iscondensation'] = False
+        vmtp_curr_data['iscondensation'] = ~np.isnan(Vm_res)
 
         vmtp_curr = Segment(num, result=vmtp_curr_data, colnames={'x': vmhs_curr.colnames['x'], 'y': hstp_curr.colnames['y']}, angle_name=vmhs_curr.angle_name, angles=vmhs_curr.angles, indizes=vmhs_curr.indizes)
 
@@ -1574,7 +1576,8 @@ def calc_tables(vmhs, vm_grid, vm_data):
         result["value"] = HS
         result["isdata"] = isdata
         result["count"] = count_table
-        result["iscondensation"] = ~np.isnan(HS_VMHS)
+        result["iscondensation"] = False
+        result["iscondensation"] = spanned_isdata_table
 
         temp = Segment(i, angles=vmhs_curr.angles, result=result, colnames=vmhs_curr.colnames, indizes=index_vmhs_curr, angle_name=vmhs_curr.angle_name)
         VMHS_OUT.append(temp)

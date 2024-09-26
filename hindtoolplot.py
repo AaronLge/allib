@@ -963,9 +963,6 @@ def get_yyaxis(ax, side='right', color=None):
     return side_ax
 
 
-import matplotlib.pyplot as plt
-import numpy as np
-
 def update_axis_colors_ticksize_axlabels(
     ax,
     color_left=None,
@@ -1158,9 +1155,8 @@ def plot_table_condesation(Segments, figsize=(8.268, 11.693), titel=None):
 
         data.append(Seg.result["value"].values)
         is_condensation = Seg.result["iscondensation"]
-        isdata = np.array(Seg.result["isdata"])
-        grey_curr = [isdata_curr & not_nan_curr for (isdata_curr, not_nan_curr) in zip(isdata, is_condensation)]
-        grey_curr = [~curr for curr in grey_curr]
+
+        grey_curr = [not curr for curr in is_condensation]
 
         grey.append(grey_curr)
 
