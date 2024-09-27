@@ -731,11 +731,24 @@ def table(data, **kwargs):
     heatmap = kwargs.get('heatmap', False)
     cmap_heatmap = kwargs.get('cmap_heatmap', 'Blues')
     figsize = kwargs.get('figsize', (8.268, 11.693))
+    datatype = kwargs.get('datatype', None)
 
-    max_data = np.max(data)
+
+    try:
+        max_data = np.max(data)
+    except:
+        max_data = None
 
     if formater is not None:
         data = gl.format_array(data, formater)
+
+    data = np.array(data)
+
+    # Cast the array to float
+    if datatype is 'float':
+        data = data.astype(float)
+    if datatype is 'str':
+        data = data.astype(str)
 
     CELLS = data
 
@@ -791,12 +804,13 @@ def table(data, **kwargs):
             if grey is not None:
                 if grey[i-row_offset, j-col_offset]:
                     table[(i, j)].set_text_props(color=[0.5, 0.5, 0.5])
-            if np.isnan(float(CELLS[i, j])):
-                if nans is not None:
-                    table[(i, j)].get_text().set_text(nans)
-            if float(CELLS[i, j]) == 0:
-                if null is not None:
-                    table[(i, j)].get_text().set_text(null)
+            if isinstance(CELLS[i, j], float):
+                if np.isnan(float(CELLS[i, j])):
+                    if nans is not None:
+                        table[(i, j)].get_text().set_text(nans)
+                if float(CELLS[i, j]) == 0:
+                    if null is not None:
+                        table[(i, j)].get_text().set_text(null)
 
     # Alternate background color for every second row
     for i, cell in enumerate(table.get_celld().values()):
