@@ -1234,7 +1234,7 @@ def save_df_list_to_excel(path, dfs, sheet_names=None):
         # Iterate through DataFrames and corresponding sheet names
         for df, sheet in zip(dfs, sheet_names):
             # Write each DataFrame to a separate sheet
-            df.to_excel(writer, sheet_name=sheet, index=False)
+            df.to_excel(writer, sheet_name=sheet, index=True)
 
 
 # Extreme Values
