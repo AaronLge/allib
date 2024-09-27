@@ -798,13 +798,20 @@ def table(data, **kwargs):
 
     table.auto_set_column_width(col=0)
 
+    def is_convertible_to_float(value):
+        try:
+            float(value)
+            return True
+        except (ValueError, TypeError):
+            return False
+
     # turn font color grey if grey==True and remove 'nans'
     for i in range(row_offset, CELLS.shape[0]):
         for j in range(col_offset, CELLS.shape[1]):
             if grey is not None:
                 if grey[i-row_offset, j-col_offset]:
                     table[(i, j)].set_text_props(color=[0.5, 0.5, 0.5])
-            if isinstance(CELLS[i, j], float):
+            if is_convertible_to_float(CELLS[i, j]):
                 if np.isnan(float(CELLS[i, j])):
                     if nans is not None:
                         table[(i, j)].get_text().set_text(nans)
