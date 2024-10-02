@@ -275,7 +275,7 @@ def condensation(x, y, grid,
             OUT['x'] < zone_line[1])
 
     if make_monotone:
-        OUT.loc[plot_line & ~np.isnan( OUT['mean']), 'mean'] = gl.make_monotone(OUT.loc[plot_line & ~np.isnan( OUT['mean']), 'mean'])
+        OUT.loc[plot_line & ~np.isnan(OUT['mean']), 'mean'] = gl.make_monotone(OUT.loc[plot_line & ~np.isnan( OUT['mean']), 'mean'])
 
     OUT['isData'] = 1
     OUT.loc[OUT['count'] <= bin_min, 'isData'] = 0
