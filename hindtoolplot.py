@@ -25,7 +25,7 @@ from allib import general as gl
 # %% classes
 
 class Line:
-    def __init__(self, x, y, label=None, color=None, linewidth=None, linestyle=None, yy_side='left', spinecolor=None):
+    def __init__(self, x, y, label=None, color=None, linewidth=None, linestyle=None, yy_side='left', spinecolor=None, alpha=1, zorder=None):
         self.x = x
         self.y = y
         self.label = label
@@ -34,6 +34,8 @@ class Line:
         self.linestyle = linestyle
         self.yy_side = yy_side
         self.spinecolor = spinecolor
+        self.alpha = alpha
+        self.zorder = zorder
 
 
 class Bar:
@@ -54,7 +56,7 @@ class Bar:
 
 
 class Scatter:
-    def __init__(self, x, y, cmap=None, color='black', cmap_mode='density', c=None, alpha=1, size=None, label=None, cbar=None, cbar_label=None, yy_side='left', spinecolor=None, cmap_norm=None, cbar_label_fontsize=None):
+    def __init__(self, x, y, cmap=None, color='black', cmap_mode='density', c=None, alpha=1, size=None, label=None, cbar=None, cbar_label=None, yy_side='left', spinecolor=None, cmap_norm=None, cbar_label_fontsize=None, zorder=None):
         self.x = x
         self.y = y
         self.color = color
@@ -70,6 +72,7 @@ class Scatter:
         self.spinecolor = spinecolor
         self.cmap_norm = cmap_norm
         self.cbar_label_fontsize = cbar_label_fontsize
+        self.zorder = zorder
 
 
 class Tile:
@@ -104,29 +107,52 @@ class Tile:
         self.y_label_right = y_label_right
         self.legend = legend
 
-    def add_line(self, line):
+    def get_current_zorder(self):
+        return len(self.lines) + len(self.scatter) + len(self.bar) + len(self.textbox) + len(self.errorbar) + len(self.bar)
+
+    def add_line(self, line, autozorder=True):
         if self.lines is None:
             self.lines = []
+
+        if autozorder:
+            line.zorder = self.get_current_zorder() + 1
+
         self.lines.append(line)
 
-    def add_scatter(self, scatter):
+    def add_scatter(self, scatter, autozorder=True):
         if self.scatter is None:
             self.scatter = []
+
+        if autozorder:
+            scatter.zorder = self.get_current_zorder() + 1
+
         self.scatter.append(scatter)
 
-    def add_textbox(self, textbox):
+    def add_textbox(self, textbox, autozorder=True):
         if self.textbox is None:
             self.textbox = []
-        self.textbox.append(textbox)
 
-    def add_errorbar(self, errorbar):
+        if autozorder:
+            textbox.zorder = self.get_current_zorder() + 1
+
+        self.textbox.append(textbox, autozorder=True)
+
+    def add_errorbar(self, errorbar, autozorder=True):
         if self.errorbar is None:
             self.errorbar = []
+
+        if autozorder:
+            errorbar.zorder = self.get_current_zorder() + 1
+
         self.errorbar.append(errorbar)
 
-    def add_bar(self, bar):
+    def add_bar(self, bar, autozorder=True):
         if self.bar is None:
             self.bar = []
+
+        if autozorder:
+            bar.zorder = self.get_current_zorder() + 1
+
         self.bar.append(bar)
 
 
@@ -345,8 +371,7 @@ def plot_tiled(Tiles, **kwargs):
                     axin.imshow(image_bgr, zorder=-1)
                     axin.axis('off')
 
-                    # grid
-                    axis.grid(visible=True, color=[0.7, 0.7, 0.7], zorder=4)
+
                     # SCATTER
                     for scatter in Tile.scatter:
 
@@ -377,7 +402,8 @@ def plot_tiled(Tiles, **kwargs):
                                           label=scatter.label,
                                           vmax=c_max,
                                           vmin=c_min,
-                                          plotnonfinite=True)
+                                          plotnonfinite=True,
+                                          zorder=scatter.zorder)
 
                             # colorbar
                             if scatter.cbar is not None:
@@ -413,13 +439,17 @@ def plot_tiled(Tiles, **kwargs):
                                     cbar.set_label(scatter.cbar_label, fontsize=cbar_label_fontsize)
 
                         else:
-                            color = scatter.color
 
                             ax_yy.scatter(scatter.x,
                                           scatter.y,
-                                          color=color,
-                                          label=scatter.label)
-
+                                          c=scatter.color,
+                                          alpha=alpha,
+                                          s=scatter.size,
+                                          label=scatter.label,
+                                          plotnonfinite=True,
+                                          zorder=scatter.zorder)
+                    # grid
+                    axis.grid(visible=True, color=[0.7, 0.7, 0.7])
                     # BAR
                     for bar in Tile.bar:
 
@@ -445,14 +475,18 @@ def plot_tiled(Tiles, **kwargs):
                                           linestyle=line.linestyle,
                                           linewidth=line.linewidth,
                                           color=line.color,
-                                          label=line.label)
+                                          label=line.label,
+                                       alpha=line.alpha,
+                                          zorder=line.zorder)
 
                         elif line.y is None:
                             ax_yy.axvline(line.x[0],
                                           linestyle=line.linestyle,
                                           linewidth=line.linewidth,
                                           color=line.color,
-                                          label=line.label)
+                                          label=line.label,
+                                       alpha=line.alpha,
+                                          zorder=line.zorder)
 
                         else:
                             ax_yy.plot(line.x,
@@ -460,7 +494,9 @@ def plot_tiled(Tiles, **kwargs):
                                        linestyle=line.linestyle,
                                        linewidth=line.linewidth,
                                        color=line.color,
-                                       label=line.label)
+                                       label=line.label,
+                                       alpha=line.alpha,
+                                          zorder=line.zorder)
 
                     # ERRORBAR
                     for errorbar in Tile.errorbar:
