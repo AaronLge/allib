@@ -218,9 +218,8 @@ class DataCol:
 
 def percentiles(df, percent: list):
     for n_perc, perc in enumerate(percent):
-        z = sc.stats.norm.ppf(perc / 100)
 
-        df[f'{perc}th percentile'] = df["mean"] + z * df["std"]
+        df[f'{perc}th percentile'] = np.percentile(df['mean'], perc)
     return
 
 
@@ -233,7 +232,7 @@ def condensation(x, y, grid,
                  zone_line=None,
                  perc=None,
                  bin_min=0,
-                 perc_mean=50,
+                 average_correction=1.0,
                  avrg_method='mean',
                  make_monotone=False):
 
@@ -254,107 +253,136 @@ def condensation(x, y, grid,
     if zone_line[0] is None:
         zone_line[0] = min(x)
 
+    # find x-zone
     n_bin = len(grid) - 1
     x_zone = [min(grid), max(grid)]
 
-    averaged, std, count = gl.grid_pointcloud_in_x(
+    # avearge points (only middle)
+    averaged, std, count, bin_ident = gl.grid_pointcloud_in_x(
         x, y, grid, method=avrg_method)
 
+    averaged.name = 'averaged'
+
+    x_bins = averaged.index
+
+    # percentiles
+    percentiles = []
+    for perc_curr in perc:
+        perc_data_curr = pd.Series(index=x_bins, name=f"{perc_curr} percentile")
+        for curr_ident in np.unique(bin_ident):
+            perc_data_curr.iloc[curr_ident-1] = np.percentile(y.iloc[np.where(bin_ident == curr_ident)], perc_curr)
+
+        percentiles.append(perc_data_curr)
+
+    # average correction
+    averaged= averaged * average_correction
+
+    for perc_curr in percentiles:
+        perc_curr = perc_curr * average_correction
+
+    #zone plot
+
+    plot_line = (x_bins > zone_line[0]) & (
+            x_bins < zone_line[1])
+
+    # make monoton
+    if make_monotone:
+        averaged.loc[plot_line & ~np.isnan(averaged.values)] = gl.make_monotone(averaged.loc[plot_line & ~np.isnan(averaged.values)])
+
+        for perc_curr in percentiles:
+            perc_curr.loc[plot_line & ~np.isnan(perc_curr.values)] = gl.make_monotone(perc_curr.loc[plot_line & ~np.isnan(perc_curr.values)])
+
+    nanMask = count > bin_min
+
+    # cut_reg bereich
+    use_regression = pd.Series(index=x_bins, name='use_regression', dtype=bool)
+    use_regression[:] = False
+
+    N_upper = round(cut_reg / 100 * len(x))
+    x_points_sorted = np.sort(x)
+
+    if N_upper == 0:
+        use_regression[:] = False
+
+    elif N_upper != len(x):
+        x_lim_upper = x_points_sorted[N_upper]
+
+        # find bin in which the regression cut is and set use_regression to 1 wenn regressionosbereich
+        _, edges, vs_bin = sc.stats.binned_statistic(
+            x_lim_upper, x_lim_upper, statistic='count', bins=n_bin, range=x_zone)
+
+        use_regression.iloc[vs_bin[0]:] = True
+
+    # regression
+    # regressionsbereich
+
+    reg_zone = (x_bins > zone_reg[0]) & (x_bins < zone_reg[1])
+
+
+    combined = []
+    regression = []
+    combined_plot = []
+
+    lines = [averaged.copy()] + [perc.copy() for perc in percentiles]
+    for line_curr in lines:
+
+        if any(use_regression):
+
+            x_reg_zone = line_curr.index[reg_zone & nanMask]
+            y_reg_zone = line_curr.values[reg_zone & nanMask]
+            counts_curr = count.values[reg_zone & nanMask]
+
+            reg_model = gl.model_regression(x_reg_zone, y_reg_zone, degree=deg_reg, weights=counts_curr, weights_regulation=reg_weighting, reg_model=reg_model)
+
+            line_curr_regression = gl.predict_regression(reg_model, x_bins)
+
+            line_curr_regression = pd.Series(data=line_curr_regression, index=x_bins, name=f"{line_curr.name} regression")
+
+        else:
+            line_curr_regression = pd.Series(index=x_bins, name=f"{line_curr.name} regression")
+            line_curr_regression[:] = float('nan')
+
+        # combine averaged with regression
+        line_curr_combined = line_curr.copy()
+        line_curr_combined.loc[use_regression] = line_curr_regression[use_regression]
+        line_curr_combined.name = f"{line_curr.name} result"
+
+        # clip to plot zone
+        line_curr_combined_plot = line_curr_combined.copy()
+        line_curr_combined_plot.name = f"{line_curr.name} plot"
+        line_curr_combined_plot[~plot_line] = float("nan")
+
+        combined.append(line_curr_combined)
+        regression.append(line_curr_regression)
+        combined_plot.append(line_curr_combined_plot)
+
     OUT = pd.DataFrame()
-    OUT["x"] = averaged.index
+    OUT["x"] = x_bins
     OUT["mean"] = averaged.values
     OUT["std"] = std.values
     OUT["count"] = count.values
 
-    if perc_mean != 50:
-        z = sc.stats.norm.ppf(perc_mean / 100)
-        OUT['mean'] = OUT['mean'] + z * OUT['std']
+    for perc_curr in percentiles:
+        OUT[perc_curr.name] = perc_curr.values
 
-    #zone plot
-    plot_line = (OUT['x'] > zone_line[0]) & (
-            OUT['x'] < zone_line[1])
+    OUT["mean regression"] = regression[0].values
+    OUT["mean result"] = combined[0].values
+    OUT["mean result plot"] = combined_plot[0].values
 
-    if make_monotone:
-        OUT.loc[plot_line & ~np.isnan( OUT['mean']), 'mean'] = gl.make_monotone(OUT.loc[plot_line & ~np.isnan( OUT['mean']), 'mean'])
+    if len(combined) > 1:
+        for perc_combined, perc_combined_plot in zip(combined[1:], combined_plot[1:]):
+            OUT[perc_combined.name] = perc_combined.values
+            OUT[perc_combined_plot.name] = perc_combined_plot.values
+        for perc_regression in regression[1:]:
+            OUT[perc_regression.name] = perc_regression.values
 
-    OUT['isData'] = 1
+
+    OUT['isData'] = nanMask.values.astype(int)
+    OUT['use_regression'] = use_regression.values.astype(int)
+    OUT['bool_reg_zone'] = reg_zone.astype(int)
+    OUT['bool_plot_zone'] = plot_line.astype(int)
     OUT.loc[OUT['count'] <= bin_min, 'isData'] = 0
 
-    nanMask = np.array(OUT['isData'])
-
-    # 95% Grenze
-    N_upper = round(cut_reg / 100 * len(x))
-
-    OUT['bool_upper'] = 0
-
-    x_points_sorted = np.sort(x)
-
-    if N_upper == 0:
-        OUT.loc[OUT.index[:], 'bool_upper'] = 1
-    elif N_upper != len(x):
-        vm_lim_upper = min(x_points_sorted[N_upper:-1])
-
-        _, edges, vs_bin = sc.stats.binned_statistic(
-            vm_lim_upper, vm_lim_upper, statistic='count', bins=n_bin, range=x_zone)
-
-        OUT.loc[OUT.index[vs_bin[0]:], 'bool_upper'] = 1
-
-    # mindesdatenpunkte in Bin
-    if len(perc) > 0:
-        percentiles(OUT, percent=perc)
-
-    # regression
-    # regressionsbereich
-    OUT['bool_reg_zone'] = 0
-
-    OUT.loc[(OUT['x'] > zone_reg[0]) & (
-            OUT['x'] < zone_reg[1]), 'bool_reg_zone'] = 1
-
-    # regression plotbereich
-    OUT['bool_reg_plot'] = 0
-
-    # if zone_line[1] is None:
-    #
-    #     nanMask_temp = nanMask.copy()
-    #     nanMask_temp[min(np.where(nanMask == 1)[0]):max(np.where(nanMask == 1)[0])] = 1
-    #
-    #     OUT.loc[(OUT['x'] > zone_line[0]) & (
-    #             nanMask_temp == 1), 'bool_reg_plot'] = 1
-
-    OUT.loc[plot_line, 'bool_reg_plot'] = 1
-
-    col_key = [
-        col for col in OUT.columns if 'mean' in col or 'percentile' in col]
-
-    # mask with bereich
-    x_reg_zone = OUT.loc[(OUT['bool_reg_zone'] == 1) & (nanMask == 1), 'x']
-
-    weights = OUT.loc[(OUT['bool_reg_zone'] == 1) & (
-            nanMask == 1), 'count']
-
-    for name in col_key:
-        if len(x_reg_zone) != 0:
-
-            y_reg_zone = OUT.loc[(OUT['bool_reg_zone'] == 1) & (nanMask == 1), name]
-
-            reg_model = gl.model_regression(x_reg_zone, y_reg_zone, degree=deg_reg, weights=weights, weights_regulation=reg_weighting, reg_model=reg_model)
-
-            OUT[f'{name} regression'] = float('nan')
-
-            pred_reg = gl.predict_regression(reg_model, OUT['x'])
-
-            OUT[f'{name} regression'] = pred_reg
-
-        else:
-            OUT[f'{name} regression'] = float('nan')
-
-        OUT[f'{name} result'] = OUT[name]
-
-        OUT.loc[OUT['bool_upper'] == 1, f'{name} result'] = OUT.loc[OUT['bool_upper'] == 1, f'{name} regression']
-
-        OUT[f'{name} result plot'] = float('nan')
-
-        OUT.loc[(OUT['bool_reg_plot'].values == 1) & (plot_line), f'{name} result plot'] = OUT.loc[(OUT['bool_reg_plot'].values == 1) & (plot_line), f'{name} result']
 
     return OUT
 
@@ -1156,7 +1184,7 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
               zone_reg=None,
               zone_line=None,
               bin_min=0,
-              perc_mean=50,
+              average_correction=1.0,
               avrg_method='mean',
               make_monotone=False):
     """Returns a list of VMHS segment objects for all segments in angle_grid.
@@ -1210,7 +1238,7 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
                                  zone_reg=zone_reg.copy(),  # Pass the list directly
                                  zone_line=zone_line.copy(),  # Pass the list directly
                                  bin_min=bin_min,
-                                 perc_mean=perc_mean,
+                                 average_correction=average_correction,
                                  avrg_method=avrg_method,
                                  make_monotone=make_monotone)
 
@@ -1241,7 +1269,7 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
                                      zone_reg=zone_reg.copy(),
                                      zone_line=zone_line.copy(),
                                      bin_min=bin_min,
-                                     perc_mean=perc_mean,
+                                     average_correction=average_correction,
                                      avrg_method=avrg_method,
                                      make_monotone=make_monotone)
 
@@ -1289,7 +1317,6 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
     quant_up = kwargs.get('quant_up', None)
     quant_low = kwargs.get('quant_low', None)
     perc = kwargs.get('percentiles', [33, 66])
-    perc_mean = kwargs.get('perc_mean', 50)
     avrg_method = kwargs.get('avrg_method', 'mean')
     make_monotone = kwargs.get('make_monotone', False)
 
@@ -1309,7 +1336,6 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
                                   zone_line=zone_line.copy(),
                                   bin_min=bin_min,
                                   perc=perc,
-                                  perc_mean=perc_mean,
                                   avrg_method=avrg_method,
                                   make_monotone=make_monotone
                                   )
@@ -1318,8 +1344,8 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
 
             if (len(perc) > 1) & (quant_up is not None) & (quant_low is not None):
                 # todo: fehlernachricht
-                key_low = f'{perc[0]}th percentile result plot'
-                key_up = f'{perc[-1]}th percentile result plot'
+                key_low = f'{perc[0]} percentile plot'
+                key_up = f'{perc[-1]} percentile plot'
 
                 Table_cond["quantile"] = quantiles(Table_cond[key_low], Table_cond["mean result plot"], Table_cond[key_up], quant_low, quant_up)
 
@@ -1347,7 +1373,6 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
                                       zone_line=zone_line.copy(),
                                       bin_min=bin_min,
                                       perc=perc,
-                                      perc_mean=perc_mean,
                                       avrg_method=avrg_method,
                                       make_monotone=make_monotone
                                       )
@@ -1356,8 +1381,8 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
 
                 if (len(perc) > 1) & (quant_up is not None) & (quant_low is not None):
                     # todo: fehlernachricht
-                    key_low = f'{perc[0]}th percentile result plot'
-                    key_up = f'{perc[-1]}th percentile result plot'
+                    key_low = f'{perc[0]} percentile plot'
+                    key_up = f'{perc[-1]} percentile plot'
 
                     Table_cond["quantile"] = quantiles(Table_cond[key_low], Table_cond["mean result plot"], Table_cond[key_up], quant_low, quant_up)
 

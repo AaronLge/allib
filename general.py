@@ -249,13 +249,13 @@ def grid_pointcloud_in_x(x, y, grid, **kwargs):
         print("choose method from: {'mean', 'weighted mean', 'median'}")
         return
 
-    std, _, _ = sc.stats.binned_statistic(
+    std, _, bin_ident = sc.stats.binned_statistic(
         x_data, y_data, statistic='std', bins=grid)
 
     count, _, _ = sc.stats.binned_statistic(
         x_data, y_data, statistic='count', bins=grid)
 
-    x_grid = (x_edges[:-1] + x_edges[1:]) / 2
+    x_grid = (grid[:-1] + grid[1:]) / 2
 
     averaged = pd.Series(averaged, index=x_grid)
 
@@ -263,7 +263,7 @@ def grid_pointcloud_in_x(x, y, grid, **kwargs):
 
     count = pd.Series(count, index=x_grid)
 
-    return averaged, std, count
+    return averaged, std, count, bin_ident
 
 
 def JONSWAP(f: list, T_p: float, H_s: float,  gamma_mode = 'torset') -> list:
