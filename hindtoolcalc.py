@@ -1,5 +1,4 @@
 import numpy as np
-from allib import general as gl
 import scipy as sc
 import pandas as pd
 import sys
@@ -302,7 +301,7 @@ def condensation(x, y, grid,
     x_points_sorted = np.sort(x)
 
     if N_upper == 0:
-        use_regression[:] = False
+        use_regression[:] = True
 
     elif N_upper != len(x):
         x_lim_upper = x_points_sorted[N_upper]
@@ -313,6 +312,8 @@ def condensation(x, y, grid,
 
         use_regression.iloc[vs_bin[0]:] = True
 
+    else:
+        use_regression.iloc[:] = False
     # regression
     # regressionsbereich
 
@@ -322,7 +323,7 @@ def condensation(x, y, grid,
     combined = []
     regression = []
     combined_plot = []
-
+    Coeffs = {}
     lines = [averaged.copy()] + [perc.copy() for perc in percentiles]
     for line_curr in lines:
 
@@ -332,7 +333,7 @@ def condensation(x, y, grid,
             y_reg_zone = line_curr.values[reg_zone & nanMask]
             counts_curr = count.values[reg_zone & nanMask]
 
-            reg_model = gl.model_regression(x_reg_zone, y_reg_zone, degree=deg_reg, weights=counts_curr, weights_regulation=reg_weighting, reg_model=reg_model)
+            reg_model, coeffs = gl.model_regression(x_reg_zone, y_reg_zone, degree=deg_reg, weights=counts_curr, weights_regulation=reg_weighting, reg_model=reg_model)
 
             line_curr_regression = gl.predict_regression(reg_model, x_bins)
 
@@ -341,6 +342,9 @@ def condensation(x, y, grid,
         else:
             line_curr_regression = pd.Series(index=x_bins, name=f"{line_curr.name} regression")
             line_curr_regression[:] = float('nan')
+            coeffs = None
+
+        Coeffs[line_curr.name] = coeffs
 
         # combine averaged with regression
         line_curr_combined = line_curr.copy()
@@ -376,13 +380,11 @@ def condensation(x, y, grid,
         for perc_regression in regression[1:]:
             OUT[perc_regression.name] = perc_regression.values
 
-
     OUT['isData'] = nanMask.values.astype(int)
     OUT['use_regression'] = use_regression.values.astype(int)
     OUT['bool_reg_zone'] = reg_zone.astype(int)
     OUT['bool_plot_zone'] = plot_line.astype(int)
     OUT.loc[OUT['count'] <= bin_min, 'isData'] = 0
-
 
     return OUT
 
