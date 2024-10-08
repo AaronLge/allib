@@ -2094,13 +2094,6 @@ def calc_angle_deviation_tables(angle_orig, angle_comp, v_m, angle_grid, **kwarg
     if v_m_zone is None:
         v_m_zone = [0, max(v_m.values)]
 
-    else:
-        if v_m_zone[1] is None:
-            v_m_zone[1] = max(v_m.values)
-
-    if np.isnan(v_m_zone[1]):
-        vm_zone[1] = max(DATA[COLNAMES["Vm"]])
-
     v_m_range = gl.range_stepfix(v_m_step, v_m_zone)
 
     comp_ang, comp_ang_mod = angles('full', N_angle_comp_sec, -15)
