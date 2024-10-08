@@ -375,7 +375,7 @@ def plot_tiled(Tiles, **kwargs):
                     # SCATTER
                     for scatter in Tile.scatter:
 
-                        ax_yy = get_yyaxis(axis, side=scatter.yy_side, color=scatter.spinecolor)
+                        axis = get_yyaxis(axis, side=scatter.yy_side, color=scatter.spinecolor)
 
                         alpha = scatter.alpha
                         if scatter.cmap is not None:
@@ -393,7 +393,7 @@ def plot_tiled(Tiles, **kwargs):
                             cmap = matplotlib.colormaps[scatter.cmap]
                             cmap.set_bad(color="grey")
 
-                            ax_yy.scatter(scatter.x,
+                            axis.scatter(scatter.x,
                                           scatter.y,
                                           cmap=cmap,
                                           c=c,
@@ -440,7 +440,7 @@ def plot_tiled(Tiles, **kwargs):
 
                         else:
 
-                            ax_yy.scatter(scatter.x,
+                            axis.scatter(scatter.x,
                                           scatter.y,
                                           c=scatter.color,
                                           alpha=alpha,
@@ -468,10 +468,10 @@ def plot_tiled(Tiles, **kwargs):
                     # LINES
                     for line in Tile.lines:
 
-                        ax_yy = get_yyaxis(axis, side=line.yy_side, color=line.spinecolor)
+                        axis = get_yyaxis(axis, side=line.yy_side, color=line.spinecolor)
 
                         if line.x is None:
-                            ax_yy.axhline(line.y[0],
+                            axis.axhline(line.y[0],
                                           linestyle=line.linestyle,
                                           linewidth=line.linewidth,
                                           color=line.color,
@@ -480,7 +480,7 @@ def plot_tiled(Tiles, **kwargs):
                                           zorder=line.zorder)
 
                         elif line.y is None:
-                            ax_yy.axvline(line.x[0],
+                            axis.axvline(line.x[0],
                                           linestyle=line.linestyle,
                                           linewidth=line.linewidth,
                                           color=line.color,
@@ -489,7 +489,7 @@ def plot_tiled(Tiles, **kwargs):
                                           zorder=line.zorder)
 
                         else:
-                            ax_yy.plot(line.x,
+                            axis.plot(line.x,
                                        line.y,
                                        linestyle=line.linestyle,
                                        linewidth=line.linewidth,
@@ -501,9 +501,9 @@ def plot_tiled(Tiles, **kwargs):
                     # ERRORBAR
                     for errorbar in Tile.errorbar:
 
-                        ax_yy = get_yyaxis(axis, side=errorbar.yy_side)
+                        axis = get_yyaxis(axis, side=errorbar.yy_side)
 
-                        ax_yy.errorbar(errorbar.x, errorbar.y, errorbar.errorlims, fmt=errorbar.fmt,
+                        axis.errorbar(errorbar.x, errorbar.y, errorbar.errorlims, fmt=errorbar.fmt,
                                        ecolor=errorbar.color)
 
                     # TEXTBOX
@@ -550,9 +550,11 @@ def plot_tiled(Tiles, **kwargs):
                                                          sci_label_size_right=fontsize_ticks)
 
                     # legend
-                    _, labels = axis.get_legend_handles_labels()
+                    ax_legend = axis.twinx()
+                    ax_legend.zorder = 100
+                    handles, labels = axis.get_legend_handles_labels()
                     if Tile.legend == 'auto' and labels:
-                        axis.legend(loc="lower right", fontsize=fontsize_legend)
+                        ax_legend.legend(handles=handles,loc="lower right", fontsize=fontsize_legend)
 
                     if type(Tile.legend) is list:
                         dummy = []
@@ -560,7 +562,7 @@ def plot_tiled(Tiles, **kwargs):
                             temp, = plt.plot([], [], color=dummy_legend["color"], label=dummy_legend["label"], linestyle=dummy_legend["linestyle"])
                             dummy.append(temp)
 
-                        axis.legend(handles=dummy, fontsize=fontsize_legend, loc="lower right")
+                        ax_legend.legend(handles=dummy, fontsize=fontsize_legend, loc="lower right")
 
                 ## POLAR
                 if isPolar[i]:
