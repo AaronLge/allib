@@ -74,7 +74,10 @@ def model_regression(x: pd.core.series.Series, y: pd.core.series.Series,
 
     model.fit(x, y, linearregression__sample_weight=weights)
 
-    return model
+    linear_reg = model.named_steps['linearregression']
+    coefficients = linear_reg.coef_
+
+    return model, coefficients
 
 
 def k_aus_omega(omega: np.ndarray, d: float) -> np.ndarray:

@@ -25,7 +25,7 @@ from allib import general as gl
 # %% classes
 
 class Line:
-    def __init__(self, x, y, label=None, color=None, linewidth=None, linestyle=None, yy_side='left', spinecolor=None):
+    def __init__(self, x, y, label=None, color=None, linewidth=None, linestyle=None, yy_side='left', spinecolor=None, alpha=1, zorder=None):
         self.x = x
         self.y = y
         self.label = label
@@ -34,6 +34,8 @@ class Line:
         self.linestyle = linestyle
         self.yy_side = yy_side
         self.spinecolor = spinecolor
+        self.alpha = alpha
+        self.zorder = zorder
 
 
 class Bar:
@@ -54,7 +56,7 @@ class Bar:
 
 
 class Scatter:
-    def __init__(self, x, y, cmap=None, color='black', cmap_mode='density', c=None, alpha=1, size=None, label=None, cbar=None, cbar_label=None, yy_side='left', spinecolor=None, cmap_norm=None, cbar_label_fontsize=None):
+    def __init__(self, x, y, cmap=None, color='black', cmap_mode='density', c=None, alpha=1, size=None, label=None, cbar=None, cbar_label=None, yy_side='left', spinecolor=None, cmap_norm=None, cbar_label_fontsize=None, zorder=None, marker='o'):
         self.x = x
         self.y = y
         self.color = color
@@ -70,7 +72,8 @@ class Scatter:
         self.spinecolor = spinecolor
         self.cmap_norm = cmap_norm
         self.cbar_label_fontsize = cbar_label_fontsize
-
+        self.zorder = zorder
+        self.marker = marker
 
 class Tile:
     def __init__(self, num, errorbar=None, bar=None, textbox=None, lines=None, scatter=None, title=None, x_label=None, y_label=None, grid=None, x_lim=(None, None),
@@ -104,29 +107,61 @@ class Tile:
         self.y_label_right = y_label_right
         self.legend = legend
 
-    def add_line(self, line):
+    def get_current_zorder(self):
+        return len(self.lines) + len(self.scatter) + len(self.bar) + len(self.textbox) + len(self.errorbar) + len(self.bar)
+
+    def add_line(self, line, zorder='auto'):
         if self.lines is None:
             self.lines = []
+
+        if zorder == 'auto':
+            line.zorder = self.get_current_zorder() + 1
+        else:
+            line.zorder = zorder
+
         self.lines.append(line)
 
-    def add_scatter(self, scatter):
+    def add_scatter(self, scatter, zorder='auto'):
         if self.scatter is None:
             self.scatter = []
+
+        if zorder == 'auto':
+            scatter.zorder = self.get_current_zorder() + 1
+        else:
+            scatter.zorder = zorder
         self.scatter.append(scatter)
 
-    def add_textbox(self, textbox):
+    def add_textbox(self, textbox, zorder='auto'):
         if self.textbox is None:
             self.textbox = []
+
+        if zorder == 'auto':
+            textbox.zorder = self.get_current_zorder() + 1
+        else:
+            textbox.zorder = zorder
+
         self.textbox.append(textbox)
 
-    def add_errorbar(self, errorbar):
+    def add_errorbar(self, errorbar, zorder='auto'):
         if self.errorbar is None:
             self.errorbar = []
+
+        if zorder == 'auto':
+            errorbar.zorder = self.get_current_zorder() + 1
+        else:
+            errorbar.zorder = zorder
+
         self.errorbar.append(errorbar)
 
-    def add_bar(self, bar):
+    def add_bar(self, bar, zorder='auto'):
         if self.bar is None:
             self.bar = []
+
+        if zorder == 'auto':
+            bar.zorder = self.get_current_zorder() + 1
+        else:
+            bar.zorder = zorder
+
         self.bar.append(bar)
 
 
@@ -160,7 +195,7 @@ class RoseBar:
 
 
 class Textbox:
-    def __init__(self, data=None, fontsize=None, fontweight='bold', corner1=None, corner2=None, colors=None, orientation_v='center', orientation_h='center', header=True):
+    def __init__(self, data=None, fontsize=None, fontweight='bold', corner1=None, corner2=None, colors=None, orientation_v='center', orientation_h='center', header=True, zorder=None):
         self.data = data
         self.fontsize = fontsize
         self.fontweight = fontweight
@@ -170,17 +205,17 @@ class Textbox:
         self.orientation_v = orientation_v
         self.orientation_h = orientation_h
         self.header = header
-
+        self.zorder = zorder
 
 class ErrorBar:
-    def __init__(self, x=None, y=None, errorlims=None, color=None, fmt=None, yy_side='left'):
+    def __init__(self, x=None, y=None, errorlims=None, color=None, fmt=None, yy_side='left', zorder=None):
         self.x = x
         self.y = y
         self.errorlims = errorlims
         self.color = color
         self.fmt = fmt
         self.yy_side = yy_side
-
+        self.zorder = zorder
 # %% functions
 def plot_tiled(Tiles, **kwargs):
 
@@ -189,7 +224,7 @@ def plot_tiled(Tiles, **kwargs):
     global_max = kwargs.get('global_max', ['auto', 'auto'])
     global_min = kwargs.get('global_min', ['auto', 'auto'])
     fontsize_title = kwargs.get('fontsize_title', 10)
-    fontsize_legend = kwargs.get('fontsize_legend', 7)
+    fontsize_legend = kwargs.get('fontsize_legend', 6)
     fontsize_label = kwargs.get('fontsize_label', 8)
     fontsize_ticks = kwargs.get('fontsize_ticks', 6)
     grid = kwargs.get('grid', [3, 2])
@@ -345,8 +380,7 @@ def plot_tiled(Tiles, **kwargs):
                     axin.imshow(image_bgr, zorder=-1)
                     axin.axis('off')
 
-                    # grid
-                    axis.grid(visible=True, color=[0.7, 0.7, 0.7], zorder=4)
+
                     # SCATTER
                     for scatter in Tile.scatter:
 
@@ -377,7 +411,9 @@ def plot_tiled(Tiles, **kwargs):
                                           label=scatter.label,
                                           vmax=c_max,
                                           vmin=c_min,
-                                          plotnonfinite=True)
+                                          plotnonfinite=True,
+                                          zorder=scatter.zorder,
+                                          marker=scatter.marker)
 
                             # colorbar
                             if scatter.cbar is not None:
@@ -413,13 +449,18 @@ def plot_tiled(Tiles, **kwargs):
                                     cbar.set_label(scatter.cbar_label, fontsize=cbar_label_fontsize)
 
                         else:
-                            color = scatter.color
 
-                            ax_yy.scatter(scatter.x,
+                            axis.scatter(scatter.x,
                                           scatter.y,
-                                          color=color,
-                                          label=scatter.label)
-
+                                          c=scatter.color,
+                                          alpha=alpha,
+                                          s=scatter.size,
+                                          label=scatter.label,
+                                          plotnonfinite=True,
+                                          zorder=scatter.zorder,
+                                          marker=scatter.marker)
+                    # grid
+                    axis.grid(visible=True, color=[0.7, 0.7, 0.7])
                     # BAR
                     for bar in Tile.bar:
 
@@ -445,14 +486,18 @@ def plot_tiled(Tiles, **kwargs):
                                           linestyle=line.linestyle,
                                           linewidth=line.linewidth,
                                           color=line.color,
-                                          label=line.label)
+                                          label=line.label,
+                                          alpha=line.alpha,
+                                          zorder=line.zorder)
 
                         elif line.y is None:
                             ax_yy.axvline(line.x[0],
                                           linestyle=line.linestyle,
                                           linewidth=line.linewidth,
                                           color=line.color,
-                                          label=line.label)
+                                          label=line.label,
+                                          alpha=line.alpha,
+                                          zorder=line.zorder)
 
                         else:
                             ax_yy.plot(line.x,
@@ -460,7 +505,9 @@ def plot_tiled(Tiles, **kwargs):
                                        linestyle=line.linestyle,
                                        linewidth=line.linewidth,
                                        color=line.color,
-                                       label=line.label)
+                                       label=line.label,
+                                       alpha=line.alpha,
+                                          zorder=line.zorder)
 
                     # ERRORBAR
                     for errorbar in Tile.errorbar:
@@ -468,7 +515,7 @@ def plot_tiled(Tiles, **kwargs):
                         ax_yy = get_yyaxis(axis, side=errorbar.yy_side)
 
                         ax_yy.errorbar(errorbar.x, errorbar.y, errorbar.errorlims, fmt=errorbar.fmt,
-                                       ecolor=errorbar.color)
+                                       ecolor=errorbar.color, zorder=errorbar.zorder)
 
                     # TEXTBOX
                     for text in Tile.textbox:
@@ -481,7 +528,8 @@ def plot_tiled(Tiles, **kwargs):
                                                    colors=text.colors,
                                                    orientation_v=text.orientation_v,
                                                    orientation_h=text.orientation_h,
-                                                   header=text.header
+                                                   header=text.header,
+                                                   zorder=text.zorder,
                                                    )
 
                     if x_min is not None: axis.set_xlim(left=x_min)
@@ -514,9 +562,12 @@ def plot_tiled(Tiles, **kwargs):
                                                          sci_label_size_right=fontsize_ticks)
 
                     # legend
-                    _, labels = axis.get_legend_handles_labels()
+                    ax_legend = axis.twinx()
+                    ax_legend.set_axis_off()
+                    ax_legend.zorder = 100
+                    handles, labels = axis.get_legend_handles_labels()
                     if Tile.legend == 'auto' and labels:
-                        axis.legend(loc="lower right", fontsize=fontsize_legend)
+                        ax_legend.legend(handles=handles,loc="lower right", fontsize=fontsize_legend)
 
                     if type(Tile.legend) is list:
                         dummy = []
@@ -524,7 +575,7 @@ def plot_tiled(Tiles, **kwargs):
                             temp, = plt.plot([], [], color=dummy_legend["color"], label=dummy_legend["label"], linestyle=dummy_legend["linestyle"])
                             dummy.append(temp)
 
-                        axis.legend(handles=dummy, fontsize=fontsize_legend, loc="lower right")
+                        ax_legend.legend(handles=dummy, fontsize=fontsize_legend, loc="lower right")
 
                 ## POLAR
                 if isPolar[i]:
@@ -605,7 +656,7 @@ def plot_rosebar(radial_data, r_bins, angles, r_max=None, plot=None, figsize=Non
 
     if plot is None:
 
-        fig, axis = plt.subplots(grid[0], grid[1], figsize=figsize, polar=True)
+        fig, axis = plt.subplots(1, 1, figsize=figsize, polar=True)
         # JBO-Logo
         with matplotlib.cbook.get_sample_data(path + '\\allib\\' + 'JBO_logo.png') as file:
             image_bgr = plt.imread(file, format='png')
@@ -860,7 +911,7 @@ def table(data, **kwargs):
     return fig
 
 
-def plot_dataframe(data, header=True, plot=None, corner1=(0.1, 0.9), corner2=(0.9, 0.1), fontsize=12, colors=None, orientation_v='center', orientation_h='center'):
+def plot_dataframe(data, header=True, plot=None, corner1=(0.1, 0.9), corner2=(0.9, 0.1), fontsize=12, colors=None, orientation_v='center', orientation_h='center', zorder=0):
     """
     Plots a DataFrame or list of lists on a Matplotlib axis using ax.text() with coordinates specified by two corners,
     relative to the current axis limits, and handles logarithmic scaling.
@@ -921,17 +972,17 @@ def plot_dataframe(data, header=True, plot=None, corner1=(0.1, 0.9), corner2=(0.
     if header:
     # Draw the column headers
         for i, col in enumerate(df.columns):
-            ax.text(x1 + i * col_width + toggle_offset* col_width / 2, y1, col, weight='bold', fontsize=fontsize, ha=orientation_h, va=orientation_v, transform=ax.transAxes)
+            ax.text(x1 + i * col_width + toggle_offset* col_width / 2, y1, col, weight='bold', fontsize=fontsize, ha=orientation_h, va=orientation_v, transform=ax.transAxes, zorder=zorder)
 
     # Draw the data cells
     for row in range(df.shape[0]):
         for col in range(df.shape[1]):
             if colors is not None:
                 ax.text(x1 + col * col_width + toggle_offset * col_width / 2, y1 - (row + 1) * row_height, str(df.iat[row, col]),
-                        fontsize=fontsize, ha=orientation_h, va=orientation_v, transform=ax.transAxes, color=colors.iat[row, col])
+                        fontsize=fontsize, ha=orientation_h, va=orientation_v, transform=ax.transAxes, color=colors.iat[row, col], zorder=zorder)
             else:
                 ax.text(x1 + col * col_width + toggle_offset * col_width / 2, y1 - (row + 1) * row_height, str(df.iat[row, col]),
-                        fontsize=fontsize, ha=orientation_h, va=orientation_v, transform=ax.transAxes)
+                        fontsize=fontsize, ha=orientation_h, va=orientation_v, transform=ax.transAxes, zorder=zorder)
     return fig, ax
 
 
@@ -1201,103 +1252,6 @@ def plot_table_condesation(Segments, figsize=(8.268, 11.693), titel=None):
     FIG = table(DATA, collabels=columns, rowlabels=vm, titel=titel, grey=GREY, row_label_name='v_m in [m/s]', formater=".2f", figsize=figsize)
 
     return FIG
-
-
-def RoseBarPlot(direction, magnitude, segments):
-
-    r_ticks, r_edges = gl.auto_ticks(0, max(magnitude), fix_end=True, edges=True)
-
-    counts = {}
-
-    for angle_segment in segments:
-
-        df = pd.concat([direction, magnitude], axis=1)
-        df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
-
-        count, _, _ = sc.stats.binned_statistic(df_filt[magnitude.name], df_filt[magnitude.name], statistic='count', bins=r_edges)
-
-        angle_midpoint = gl.angle_midpoints([angle_segment[0]], [angle_segment[1]])
-
-        counts[angle_midpoint] = count
-
-    fig, ax_polar = plt.subplots(
-        subplot_kw={'projection': 'polar'}, figsize=size_1mal1)
-
-    i = 0
-
-    cmap = matplotlib.pyplot.get_cmap('cool', n_r_seg)
-
-    for _ in r_segments:
-
-        r = [np.sum(x["grid"]["prob"][0:n_r_seg - i])
-             for x in Data_Out.values()]
-
-        if INPUT_SELECT["include_360"]:
-            r.pop(0)
-
-        ax_polar.bar(theta, r, width=width_seg,
-                     color=cmap(n_r_seg - i), alpha=1)
-        i = i + 1
-
-    if Input["label_by_section"]:
-        ax_polar.set_xticks(theta)
-        x_ticklabels = [str(round(label * 360 / (2 * np.pi), 2)
-                            ) + ' °' for label in theta]
-        ax_polar.set_xticklabels(x_ticklabels)
-
-    ax_polar.tick_params(pad=5)
-    ax_polar.tick_params(axis='x')
-
-    ax_polar.set_yticks(ax_polar.get_yticks())
-
-    y_ticklables = ax_polar.get_yticklabels()
-    y_ticklables = [label.get_text() + ' %' for label in y_ticklables]
-    ax_polar.set_yticklabels(y_ticklables)
-
-    labels = list(r_segments)
-    labels.insert(0, 0)
-
-    from matplotlib.cm import ScalarMappable
-    from matplotlib.colors import Normalize
-
-    ax_polar.grid(Input["grid"], zorder=-1)
-
-    cmappable = ScalarMappable(Normalize(0, 1), cmap=cmap)
-    cbar = fig.colorbar(cmappable,
-                        ax=ax_polar, pad=0.1
-                        )
-
-    cbar.set_ticks(ticks=np.linspace(0, 1, n_r_seg + 1), labels=labels)
-
-    for tick_label in cbar.ax.yaxis.get_ticklabels():
-        tick_label.set_fontsize(6)
-
-    if Input["name_colorbar"] is None:
-        cbar.set_label(Input["col_name_r"])
-    else:
-        cbar.set_label(Input["name_colorbar"])
-
-    ax_polar.set_rlabel_position(Input["rot_r_label"])
-    # Set 0 degrees to point upward (North)
-    ax_polar.set_theta_zero_location("N")
-    ax_polar.set_theta_direction(-1)  # Rotate clockwise
-
-    if Input["title"] is None:
-        fig.suptitle(
-            f"Roseplot '{Input['col_name_r']}' over '{Input['col_name_angle']}'" +
-            "\n" + f"samples: {len(DATA):.1e}"
-                   f" | {DATA.index[0].round('1d').date()} to {DATA.index[-1].round('1d').date()} "
-                   f"| sample rate: {INPUT_SELECT['dt_sample']}",
-
-            fontsize=7, y=0.93)
-    else:
-        fig.suptitle(Input["title"], fontsize=7, y=0.93)
-
-    r_max = ax_polar.get_rmax()
-    ax_polar.set_rmax(np.ceil(r_max))
-    fig.tight_layout()
-
-    return [fig]
 
 
 # %% Save figure
