@@ -387,7 +387,7 @@ def condensation(x, y, grid,
     OUT['bool_plot_zone'] = plot_line.astype(int)
     OUT.loc[OUT['count'] <= bin_min, 'isData'] = 0
 
-    return OUT
+    return OUT, Coeffs
 
 
 def quantiles(perc_low, middle, perc_up, quant_low, quant_up):
@@ -1586,7 +1586,7 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
     if angle_grid is None:
         # omni
         df = pd.concat([Vm, Hs], axis=1)
-        VMHS_DATA = condensation(df[Vm.name], df[Hs.name], grid,
+        VMHS_DATA, Coeffs = condensation(df[Vm.name], df[Hs.name], grid,
                                  reg_model=model_reg,
                                  deg_reg=deg_reg,
                                  cut_reg=cut_reg,
@@ -1599,7 +1599,7 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
                                  make_monotone=make_monotone)
 
         temp = Segment(0, angles=None,
-                       result=VMHS_DATA,
+                       result={'data': VMHS_DATA, 'coeffs': Coeffs},
                        colnames={'x': Vm.name, 'y': Hs.name},
                        indizes=list(df.index),
                        angle_name=None)
@@ -1617,7 +1617,7 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
             df = pd.concat([Vm, Hs, angle], axis=1)
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
 
-            VMHS_DATA = condensation(df_filt[Vm.name], df_filt[Hs.name], grid,
+            VMHS_DATA, Coeffs = condensation(df_filt[Vm.name], df_filt[Hs.name], grid,
                                      deg_reg=deg_reg,
                                      reg_model=model_reg,
                                      cut_reg=cut_reg,
@@ -1629,8 +1629,14 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
                                      avrg_method=avrg_method,
                                      make_monotone=make_monotone)
 
-            temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], indizes=list(df_filt.index), result=VMHS_DATA,
-                           colnames={'x': Vm.name, 'y': Hs.name}, angle_name=angle.name)
+            temp = Segment(num,
+                           angles=[angle_segment[0],
+                                   angle_segment[1]],
+                           indizes=list(df_filt.index),
+                           result={'data': VMHS_DATA, 'coeffs': Coeffs},
+                           colnames={'x': Vm.name, 'y': Hs.name},
+                           angle_name=angle.name)
+
             Data_Out.append(temp)
             num = num + 1
 
@@ -1683,7 +1689,7 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
 
     if angle_grid is None:
         # omni
-        Table_cond = condensation(Hs, Tp, grid,
+        Table_cond, Coeffs = condensation(Hs, Tp, grid,
                                   deg_reg=deg_reg,
                                   reg_model=model_reg,
                                   cut_reg=cut_reg,
@@ -1706,7 +1712,7 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
                 Table_cond["quantile"] = quantiles(Table_cond[key_low], Table_cond["mean result plot"], Table_cond[key_up], quant_low, quant_up)
 
         temp = Segment(0, angles=None,
-                       result=Table_cond,
+                       result={'data': Table_cond, 'coeffs': Coeffs},
                        angle_name=None,
                        colnames={'x': Hs.name, 'y': Tp.name},
                        indizes=list(Hs.index))
@@ -1720,7 +1726,7 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
 
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
 
-            Table_cond = condensation(df_filt[Hs.name], df_filt[Tp.name], grid,
+            Table_cond, Coeffs = condensation(df_filt[Hs.name], df_filt[Tp.name], grid,
                                       deg_reg=deg_reg,
                                       reg_model=model_reg,
                                       cut_reg=cut_reg,
@@ -1742,7 +1748,11 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
 
                     Table_cond["quantile"] = quantiles(Table_cond[key_low], Table_cond["mean result plot"], Table_cond[key_up], quant_low, quant_up)
 
-            temp = Segment(num=num, angles=[angle_segment[0], angle_segment[1]], result=Table_cond, indizes=list(df_filt.index), angle_name=angle.name,
+            temp = Segment(num=num,
+                           angles=[angle_segment[0], angle_segment[1]],
+                           result={'data': Table_cond, 'coeffs': Coeffs},
+                           indizes=list(df_filt.index),
+                           angle_name=angle.name,
                            colnames={'x': Hs.name, 'y': Tp.name})
 
             Data_Out.append(temp)
@@ -1764,8 +1774,9 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
     for vmhs_curr, hstp_curr in zip(vmhs, hstp):
         vmtp_curr_data = pd.DataFrame()
 
-        vmhs_curr_data = vmhs_curr.result
-        hstp_curr_data = hstp_curr.result
+        vmhs_curr_data = vmhs_curr.result["data"]
+        hstp_curr_data = hstp_curr.result["data"]
+
         if "quantile" in hstp_curr_data.keys():
             key_tp = "quantile"
         else:
@@ -1803,7 +1814,7 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
         vmtp_curr_data['iscondensation'] = False
         vmtp_curr_data['iscondensation'] = ~np.isnan(Vm_res)
 
-        vmtp_curr = Segment(num, result=vmtp_curr_data, colnames={'x': vmhs_curr.colnames['x'], 'y': hstp_curr.colnames['y']}, angle_name=vmhs_curr.angle_name, angles=vmhs_curr.angles, indizes=vmhs_curr.indizes)
+        vmtp_curr = Segment(num, result={'data': vmtp_curr_data}, colnames={'x': vmhs_curr.colnames['x'], 'y': hstp_curr.colnames['y']}, angle_name=vmhs_curr.angle_name, angles=vmhs_curr.angles, indizes=vmhs_curr.indizes)
 
         VMTP.append(vmtp_curr)
         num = num + 1
@@ -1915,7 +1926,7 @@ def calc_tables(vmhs, vm_grid, vm_data):
     # VMHS
     i = 0
     for vmhs_curr in VMHS:
-        vmhs_result = vmhs_curr.result
+        vmhs_result = vmhs_curr.result["data"]
 
         # VM and HS data from Regression curves
         HS_VMHS = vmhs_result["mean result plot"]
@@ -2093,6 +2104,9 @@ def calc_angle_deviation_tables(angle_orig, angle_comp, v_m, angle_grid, **kwarg
     # v_m zone generation
     if v_m_zone is None:
         v_m_zone = [0, max(v_m.values)]
+
+    if v_m_zone[1] is None:
+        v_m_zone[1] = max(v_m.values)
 
     v_m_range = gl.range_stepfix(v_m_step, v_m_zone)
 
