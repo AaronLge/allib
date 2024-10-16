@@ -6,14 +6,11 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 import sqlite3
-import re
 import datetime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import random
-import shutil
 import subprocess
-import os
 
 
 def model_regression(x: pd.core.series.Series, y: pd.core.series.Series,

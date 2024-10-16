@@ -1,5 +1,5 @@
 import numpy as np
-from allib import general as gl
+import general as gl
 import scipy as sc
 import pandas as pd
 import sys
@@ -8,11 +8,6 @@ from sqlite3 import Error
 import os
 import shutil
 import chardet
-
-path = r"C:\\temp\\python_self_crated\\packages"
-sys.path.insert(0, path)
-from allib import general as gl
-
 
 # %%classes
 class Segment:

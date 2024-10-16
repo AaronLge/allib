@@ -19,7 +19,7 @@ import pandas as pd
 
 path = r"C:\\temp\\python_self_crated\\packages"
 sys.path.insert(0, path)
-from allib import general as gl
+import general as gl
 
 
 # %% classes
