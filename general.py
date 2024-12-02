@@ -149,7 +149,6 @@ def predict_regression(model: skl.linear_model._base.LinearRegression, x_pred: n
 
     return y_pred
 
-
 def filter_dataframe(dataframe, column_names: str | list, a_min: float | list,
                      a_max: float | list) -> pd.core.frame.DataFrame | list:
     """filters "dataframe" on the basis of one or more colums specified in column_names in the boundarys given in the corresponding entrys of "a_min" and "a_max"
