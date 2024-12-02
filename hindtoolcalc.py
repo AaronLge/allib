@@ -10,7 +10,7 @@ import chardet
 import hashlib
 
 
-from libaries import general as gl
+from allib import general as gl
 
 
 # %%classes

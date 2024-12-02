@@ -4,8 +4,8 @@ import subprocess
 import time
 from threading import Thread
 
-from libaries import general as gl
-from libaries import hindtoolplot as hc_plt
+from allib import general as gl
+from allib import hindtoolplot as hc_plt
 import shutil
 
 def insertLatexVars(string, replacements):
