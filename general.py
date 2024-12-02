@@ -1,17 +1,20 @@
-import pandas as pd
+import datetime
+import os
+import random
+import sqlite3
+import subprocess
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
+import pandas as pd
 import scipy as sc
 import sklearn as skl
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
-import sqlite3
-import datetime
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-import random
-import subprocess
-
+from sklearn.preprocessing import PolynomialFeatures
+from matplotlib.backends.backend_pdf import PdfPages
+import decimal
+import e57
 
 def model_regression(x: pd.core.series.Series, y: pd.core.series.Series,
                      **kwargs) -> skl.linear_model._base.LinearRegression:
@@ -230,7 +233,7 @@ def grid_pointcloud_in_x(x, y, grid, **kwargs):
     method = kwargs.get('method', False)
 
     def mean_weight(i):
-        #i[i == 0] = float('nan')
+        # i[i == 0] = float('nan')
         mean_w = np.sqrt(np.sum(i ** 2) / np.size(i[~np.isnan(i)]))
         return mean_w
 
@@ -266,7 +269,7 @@ def grid_pointcloud_in_x(x, y, grid, **kwargs):
     return averaged, std, count, bin_ident
 
 
-def JONSWAP(f: list, T_p: float, H_s: float,  gamma_mode = 'torset') -> list:
+def JONSWAP(f: list, T_p: float, H_s: float, gamma_mode='torset') -> list:
     """calculates the JONSWAP Spectrum
         
     Parameters
@@ -296,8 +299,7 @@ def JONSWAP(f: list, T_p: float, H_s: float,  gamma_mode = 'torset') -> list:
             gamma = 1
 
     if gamma_mode == 'torset':
-        gamma = 35 * ((2 * np.pi * H_s)/(9.81 * T_p**2)) **(6/7)
-
+        gamma = 35 * ((2 * np.pi * H_s) / (9.81 * T_p ** 2)) ** (6 / 7)
 
     sigma_under = 0.07
 
@@ -385,7 +387,6 @@ def calculate_histogram(x, **kwargs):
     bin_size_fix = kwargs.get('bin_size_fix', None)
     x_min = kwargs.get('x_min', min(x))
 
-
     # get significant Digits
     x_str = [str(value) for value in x]
     lenths = [len(dig.split('.')[1]) for dig in x_str]
@@ -439,7 +440,6 @@ def fit_weibull_distribution(data, x_grid, **kwargs):
         params: A dictionary containing the parameters of the fitted Weibull distribution.
                 {"shape": shape, "loc": loc, "scale": scale, "mean": mean, "std": std}
     """
-
 
     floc = kwargs.get("floc", None)
     # Fit the Weibull distribution to the data
@@ -518,14 +518,14 @@ def interpolate_increasing_decreasing(new_x_values, x_values, y_values, kind='li
     return new_y_values
 
 
-def read_input_txt(file_path):
+def read_input_txt(file_path, encoding='utf-8'):
     data_dicts = []
     dict_names = []
     cd = {}
     dict_num = 0
     DICT_OUT = {}
 
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding=encoding) as file:
         for line in file:
 
             # auskommentieren
@@ -580,8 +580,44 @@ def string_to_latex(string):
 
     string = repr(string)
     string = string.replace(r'\n', r'\\')
-    string = "$"+string+"$"
+    string = "$" + string + "$"
     return string
+
+
+import pandas as pd
+
+
+def xlsx2dict(file_path):
+    """
+    Reads an Excel file and returns a dictionary containing each sheet as a DataFrame.
+
+    Each sheet in the Excel file will be stored as a DataFrame in the dictionary,
+    with the sheet name as the key. The first row of each sheet is used as column headers,
+    and the first column is set as the index for each DataFrame.
+
+    Parameters:
+    ----------
+    file_path : str
+        The path to the Excel (.xlsx) file.
+
+    Returns:
+    -------
+    dict
+        A dictionary where each key is a sheet name, and each value is a DataFrame
+        representing the sheet's data, with headers and indices correctly set.
+
+    """
+
+    # Read all sheets into a dictionary with pandas
+    xls = pd.ExcelFile(file_path)
+    sheets_dict = {}
+
+    for sheet_name in xls.sheet_names:
+        # Read each sheet, using the first row as headers and the first column as the index
+        df = pd.read_excel(xls, sheet_name=sheet_name, header=0, index_col=0)
+        sheets_dict[sheet_name] = df
+
+    return sheets_dict
 
 
 def export_df_from_sql(db_file, table_name, column_names=None, timeframe=None, indizes=None):
@@ -607,10 +643,9 @@ def export_df_from_sql(db_file, table_name, column_names=None, timeframe=None, i
         cursor = conn.cursor()
 
         # Check if table exists
-        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}' ORDER BY ROWID;")
         if not cursor.fetchone():
             raise ValueError(f"Table '{table_name}' does not exist in the database.")
-
 
         # Check if specified columns exist in the table
         cursor.execute(f"PRAGMA table_info({table_name});")
@@ -643,23 +678,24 @@ def export_df_from_sql(db_file, table_name, column_names=None, timeframe=None, i
 
             index_col_name = index_info[0][2]
 
-            cursor.execute(f'SELECT "{index_col_name}" FROM "{table_name}";')
+            cursor.execute(f'SELECT "{index_col_name}" FROM "{table_name}" ORDER BY ROWID;')
             index_col = cursor.fetchall()
 
             index_col = [info[0] for info in index_col]
 
             try:
                 index_col = pd.to_datetime(index_col)
-            except ValueError:
+            except:
+                print("could not convert index to datetime object")
                 index_col = index_col
             df.index = index_col
 
             if timeframe is not None:
                 df = df.loc[timeframe[0]:timeframe[1]]
-        
+
         if indizes is not None:
             df = df.loc[indizes]
-        
+
         return df
 
     except sqlite3.Error as e:
@@ -668,6 +704,35 @@ def export_df_from_sql(db_file, table_name, column_names=None, timeframe=None, i
     finally:
         if conn:
             conn.close()
+
+
+def export_colnames_from_db(database_path):
+    # Connect to the SQLite database
+    conn = sqlite3.connect(database_path)
+    cursor = conn.cursor()
+
+    # Dictionary to store table names and their respective column names
+    table_columns = {}
+
+    # Get the list of all tables in the database
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = cursor.fetchall()
+
+    # Iterate over each table and get the column names
+    for table in tables:
+        table_name = table[0]
+
+        # Use double quotes to escape the table name
+        cursor.execute(f'PRAGMA table_info("{table_name}");')
+        columns = cursor.fetchall()
+        column_names = [column[1] for column in columns]  # Column names are in the 2nd index
+
+        table_columns[table_name] = column_names
+
+    # Close the connection
+    conn.close()
+
+    return table_columns
 
 
 def auto_ticks(start, end, num_ticks=10, fix_end=False, edges=False):
@@ -694,13 +759,13 @@ def auto_ticks(start, end, num_ticks=10, fix_end=False, edges=False):
     if fix_end:
         # # Ensure the last tick is exactly the end value
         ticks = np.append(ticks[:-1], end)
-    
+
     if edges:
         # Calculate the bin edges based on the ticks (treating ticks as midpoints)
         bin_width = np.diff(ticks) / 2
         edges = np.concatenate(([ticks[0] - bin_width[0]], ticks[:-1] + bin_width, [ticks[-1] + bin_width[-1]]))
         return ticks, edges
-    
+
     else:
         return ticks
 
@@ -899,7 +964,8 @@ def alias(input_data, original, alias):
 
         # Finally, replace placeholders with their actual values
         for placeholder, replacement_value in placeholder_map.items():
-            input_string = input_string.replace(placeholder, replacement_value)
+            if replacement_value is not None:
+                input_string = input_string.replace(str(placeholder), str(replacement_value))
 
         return input_string
 
@@ -911,48 +977,9 @@ def alias(input_data, original, alias):
     else:
         raise ValueError("Input must be either a string or a list of strings.")
 
-    # def alias(input_data, original, alias):
-#     """Replaces every instance in the input string that matches the longest possible substring from the `original` dict values with the corresponding values in the `alias` dict, ensuring each part is replaced only once."""
-#
-#     def replace_in_string(input_string):
-#         # Sort keys by the length of their corresponding values in the original dictionary in descending order
-#         sorted_keys = sorted(original, key=lambda k: len(original[k]), reverse=True)
-#
-#         # A list to keep track of replaced segments using start and end indices
-#         replacements = []
-#
-#         # Placeholder function to avoid overlapping replacements
-#         def replace_once(match):
-#             start, end = match.span()
-#             # Check if this segment overlaps with any previous replacement
-#             for s, e in replacements:
-#                 if start < e and end > s:  # Overlapping condition
-#                     return match.group(0)  # Return the original substring without replacement
-#             # Record this replacement
-#             replacements.append((start, end))
-#             # Return the alias replacement
-#             return alias[current_key]
-#
-#         # Process each key in sorted order (longest match first)
-#         for current_key in sorted_keys:
-#             if current_key in alias:
-#                 # Create a regex pattern to find all non-overlapping matches of the current original value
-#                 pattern = re.escape(original[current_key])
-#                 input_string = re.sub(pattern, replace_once, input_string)
-#
-#         return input_string
 
-    # Handle the input_data being a list or a string
-    if isinstance(input_data, list):
-        return [replace_in_string(s) for s in input_data]
-    elif isinstance(input_data, str):
-        return replace_in_string(input_data)
-    else:
-        raise ValueError("Input must be either a string or a list of strings.")
+def save_figs_as_png(FIG, filename,dpi=600, lualatex_mode=False):
 
-
-def save_figs_as_png(FIG, filename, **kwargs):
-    dpi = kwargs.get('dpi', 600)
 
     i = 1
     for fig in FIG:
@@ -960,6 +987,44 @@ def save_figs_as_png(FIG, filename, **kwargs):
         i = i + 1
         plt.close(fig)
     return
+
+# def save_figs_as_png(figures, path_in, dpi=600):
+#     """
+#     Saves a list of Matplotlib figures as PNGs using a PDF file path.
+#
+#     Args:
+#         figures (list): List of Matplotlib figure objects to save.
+#         pdf_path (str): Path for the temporary PDF file (also used as a base name for PNGs).
+#         dpi (int, optional): DPI for the PNG output. Defaults to 600.
+#
+#     Returns:
+#         list: List of file paths for the saved PNG files.
+#     """
+#     pdf_path = path_in + '.pdf'
+#
+#     png_paths = []
+#     pdf_dir, pdf_filename = os.path.split(pdf_path)
+#     base_name = os.path.splitext(pdf_filename)[0]
+#
+#
+#     # Save figures to a PDF file at the specified path
+#     with PdfPages(pdf_path) as pdf:
+#         for fig in figures:
+#             pdf.savefig(fig, dpi=dpi)
+#
+#     # Open the PDF with fitz to convert each page to PNG
+#     with fitz.open(pdf_path) as pdf_document:
+#         for page_num in range(pdf_document.page_count):
+#             page = pdf_document.load_page(page_num)
+#             png_path = os.path.join(pdf_dir, f"{base_name}_page_{page_num + 1}.png")
+#             page_pix = page.get_pixmap(dpi=dpi)
+#             page_pix.save(png_path)
+#             png_paths.append(png_path)
+#
+#     # Remove the PDF file after PNG conversion
+#   #  os.remove(pdf_path)
+#
+#     return png_paths
 
 
 def save_figs_as_pdf(FIG, filename, **kwargs):
@@ -1077,7 +1142,6 @@ def compare_values(value1, value2, operation="=="):
     if value1 is None and value2 is None:
         return False
 
-
     # If the types of the values are different, return False
     if type(value1) != type(value2):
         return False
@@ -1093,7 +1157,7 @@ def compare_values(value1, value2, operation="=="):
         raise ValueError("Invalid operation. Supported operations are '==', '>', and '<'.")
 
 
-def significant_digits(arr, sig_digits):
+def round_to_significant_digit(arr, sig_digits):
     """
     Rounds each element in the numpy array to the specified number of significant digits and
     returns the results as strings.
@@ -1122,6 +1186,49 @@ def significant_digits(arr, sig_digits):
     vectorized_round = np.vectorize(lambda x: round_to_significant(x, sig_digits))
 
     return vectorized_round(arr)
+
+
+def get_significant_digits(x):
+    """
+    Calculate the maximum number of significant digits after the decimal point
+    in a list of floating-point numbers, including those in scientific notation.
+
+    Args:
+        x (list of float): A list of floating-point numbers, which may include
+                            numbers in scientific notation.
+
+    Returns:
+        int: The maximum number of digits after the decimal point in the list.
+             If no number has a decimal part, returns 0.
+
+    Example:
+        >>> get_significant_digits([-1e-06, -2e-06, -3e-06, 8e-05, -3e-05, 8e-06, 6e-06, 5e-05, 3e-05])
+        6
+
+    Notes:
+        - The function uses the `decimal.Decimal` class to handle floating-point precision and scientific notation.
+        - The input list can contain both small and large float values, and the function will correctly count significant digits for all valid inputs.
+    """
+
+    # Convert each number to a string
+    x_str = [str(value) for value in x]
+
+    # Use decimal module to handle floating point precision issues
+    lenths = []
+    for dig in x_str:
+        # Try to parse scientific notation as a float, then convert to a string with fixed precision
+        try:
+            dec_value = decimal.Decimal(dig)
+            # Split the number at the decimal point
+            if '.' in str(dec_value):
+                lenths.append(len(str(dec_value).split('.')[1]))
+            else:
+                lenths.append(0)
+        except:
+            lenths.append(0)
+
+    # Return the maximum length of the decimal parts
+    return max(lenths)
 
 
 def merge_dataframes(df1, df2):
@@ -1182,7 +1289,7 @@ def filter_df_cols_by_keywords(df, keywords):
     Returns:
         pd.DataFrame: A new dataframe containing only the columns with names that match any of the keywords.
     """
-    
+
     # Create a boolean mask for columns containing any of the keywords
     mask = df.columns.to_series().str.contains('|'.join(keywords), case=False, na=False)
 
@@ -1372,7 +1479,6 @@ def x_max_sampeling(x, time_window_offeset, n_samp=None):
 
 
 def gumbel_conf_intervall(x_max, beta=None, mu=None, mode='percentile', algorithm='1', N_itter=1000, freq_samp=1, perc_up=95, perc_down=5, T_max=100):
-
     N_xmax = len(x_max)
     if beta is None or mu is None:
         beta, mu = Gumbel_coeff(x_max)
@@ -1402,38 +1508,46 @@ def gumbel_conf_intervall(x_max, beta=None, mu=None, mode='percentile', algorith
             band_up = [middle[i] + std_dev_curr for i, std_dev_curr in enumerate(std_dev)]
             band_down = [middle[i] - std_dev_curr for i, std_dev_curr in enumerate(std_dev)]
 
-    
     return band_down, middle, band_up, T_R_grid
 
 
 # Function to check if df1 is in df2, and if so, output the row number of the matching row
-def add_unique_row(df1, df2):
+
+def add_unique_row(df1, df2, exclude_columns=None):
     """
-        Checks if a row from df1 exists in df2. If the row exists, returns the
-        updated df2 and the indices of the matching row(s). If the row does not
-        exist, appends the row from df1 to df2 and returns the updated df2 with
-        an empty list of matching indices.
+    Checks if a row from df1 exists in df2 (excluding specified columns).
+    If the row exists, returns the updated df2 and the indices of the matching row(s).
+    If the row does not exist, appends the row from df1 to df2 and returns the
+    updated df2 with an empty list of matching indices.
 
-        Parameters:
-        df1 (pd.DataFrame): A DataFrame with a single row that will be checked
-                            against df2.
-        df2 (pd.DataFrame): A DataFrame that may contain one or more rows, which
-                            will be compared to the row in df1.
+    Parameters:
+    df1 (pd.DataFrame): A DataFrame with a single row that will be checked
+                        against df2.
+    df2 (pd.DataFrame): A DataFrame that may contain one or more rows, which
+                        will be compared to the row in df1.
+    exclude_columns (list, optional): List of columns to exclude from the
+                                      uniqueness check. Default is None.
 
-        Returns:
-        tuple:
-            pd.DataFrame: The updated DataFrame (df2), either with or without the
-                          new row from df1.
-            list: A list of indices where the row from df1 matches any row in df2.
-                  If no match is found, the list is empty."""
+    Returns:
+    tuple:
+        pd.DataFrame: The updated DataFrame (df2), either with or without the
+                      new row from df1.
+        list: A list of indices where the row from df1 matches any row in df2.
+              If no match is found, the list is empty.
+    """
+    if exclude_columns is None:
+        exclude_columns = []
 
-    # Check for rows in df2 that completely match df1
-    matching_rows = df2[df2.eq(df1.values[0]).all(axis=1)]
+    # Drop excluded columns from both df1 and df2 for comparison
+    df1_comp = df1.drop(columns=exclude_columns, errors='ignore')
+    df2_comp = df2.drop(columns=exclude_columns, errors='ignore')
+
+    # Check for rows in df2 that match the row in df1
+    matching_rows = df2_comp[df2_comp.eq(df1_comp.values[0]).all(axis=1)]
 
     if not matching_rows.empty:
-        # If a match is found, output the row number(s)
+        # If a match is found, get the row indices
         matching_indices = matching_rows.index.tolist()
-
     else:
         # If no match is found, append df1 to df2
         df2 = pd.concat([df2, df1], ignore_index=True)
@@ -1442,19 +1556,18 @@ def add_unique_row(df1, df2):
     return df2, matching_indices
 
 
-#Validation
+# Validation
 def calc_JBOOST(path_exe, proj_name, Hs, Tp, gamma):
-
     # exporting JBOOST input Files of Database
-    write_JBOOST_wave(Hs, Tp, gamma, path_exe+'wave.lua')
+    write_JBOOST_wave(Hs, Tp, gamma, path_exe + 'wave.lua')
 
     # Run JBOOST
     subprocess.check_call(['JBOOST.exe', proj_name],
                           cwd=path_exe, shell=True)
 
     # import points of Database
-    temp, debug = import_JBOOST(path_exe+'Results_JBOOST_Text/JBOOST.out')
-    
+    temp, debug = import_JBOOST(path_exe + 'Results_JBOOST_Text/JBOOST.out')
+
     out = {}
     for ck, cd in temp.items():
         out[ck] = pd.DataFrame(data=cd.values, index=Hs.index, columns=cd.columns)
@@ -1511,7 +1624,6 @@ def import_JBOOST(path):
 
 
 def write_JBOOST_wave(Hs, Tp, gamma, path):
-    
     if isinstance(gamma, float):
         gamma = [gamma for i in range(Hs.shape[0])]
 
@@ -1535,10 +1647,9 @@ def write_JBOOST_wave(Hs, Tp, gamma, path):
 
 
 def write_DEL_base(path_DataBase, DEL_data, Meta_Data):
-    
     # write meta data in dataframe
     df_Meta = pd.DataFrame(columns=list(Meta_Data.keys()))
-    
+
     for col in df_Meta.columns:
         df_Meta.loc[0, col] = Meta_Data[col]
 
@@ -1573,7 +1684,7 @@ def write_DEL_base(path_DataBase, DEL_data, Meta_Data):
             df_Meta.set_index(pd.Index([DEL_config_name]))
             df_Meta = df_Meta.set_index(pd.Index([DEL_config_name]))
             df_meta_combined = pd.concat((df_meta_sql, df_Meta), axis=0)
-    
+
             df_meta_combined.to_sql('DEL_Meta', conn, if_exists='replace', index=True)
 
     DEL_data.to_sql(DEL_config_name, conn, if_exists='replace', index=True)
@@ -1583,7 +1694,7 @@ def write_DEL_base(path_DataBase, DEL_data, Meta_Data):
     return DEL_config_name
 
 
-def check_meta_in_valid_db(db_path, Meta):
+def check_meta_in_valid_db(db_path, Meta, exclude_columns=None):
     # write meta data in dataframe
     df_Meta = pd.DataFrame(columns=list(Meta.keys()))
 
@@ -1602,8 +1713,8 @@ def check_meta_in_valid_db(db_path, Meta):
 
     if meta_exists:
         # check, if calculation is already been run in the database
-        df_Meta_sql = pd.read_sql_query(f"SELECT * FROM {table_name}", conn, index_col ='index')
-        _, idx_in_meta = add_unique_row(df_Meta, df_Meta_sql)
+        df_Meta_sql = pd.read_sql_query(f"SELECT * FROM {table_name}", conn, index_col='index')
+        _, idx_in_meta = add_unique_row(df_Meta, df_Meta_sql, exclude_columns=exclude_columns)
 
     else:
         idx_in_meta = []
@@ -1638,6 +1749,7 @@ def median_sample_rate(index) -> pd.Timedelta:
     median_diff = time_diffs.median()
 
     return median_diff
+
 
 def fill_nans_constant(x_vector, mask=None):
     """
@@ -1674,9 +1786,9 @@ def fill_nans_constant(x_vector, mask=None):
                 if last_valid is not None:
                     filled_vector[i] = last_valid
             else:
-                last_valid = filled_vector[i] # Update last valid value
+                last_valid = filled_vector[i]  # Update last valid value
                 if leading_nan:
-                    filled_vector[i-i_leading_nan:i] = last_valid
+                    filled_vector[i - i_leading_nan:i] = last_valid
                     leading_nan = False
 
 
@@ -1685,7 +1797,6 @@ def fill_nans_constant(x_vector, mask=None):
             last_valid = None if np.isnan(filled_vector[i]) else filled_vector[i]
 
     return filled_vector
-
 
 
 def fill_nan_with_linspace(vector):
@@ -1713,3 +1824,117 @@ def fill_nan_with_linspace(vector):
     filled_vector[np.isnan(vector)] = linspace_values[np.isnan(vector)]
 
     return filled_vector
+
+
+def xlsx2csv(excel_file, output_dir, exclude_sheets=None):
+    """
+    Save each sheet of an Excel file as a CSV file in the specified output directory.
+
+    Parameters:
+    excel_file (str): Path to the input Excel file.
+    output_dir (str): Directory where CSV files will be saved. Created if it doesn't exist.
+    exclude_sheets (list of int, optional): List of sheet indices (1-based) to exclude.
+                                            For example, [1, 3] will exclude the first and third sheets.
+
+    Returns:
+    None
+    """
+    # Load the Excel file
+    excel_data = pd.ExcelFile(excel_file)
+
+    # Ensure output directory exists
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Normalize exclude_sheets to 0-based indexing
+    if exclude_sheets:
+        exclude_sheets = [i - 1 for i in exclude_sheets]
+
+    # Loop through each sheet in the Excel file
+    for sheet_index, sheet_name in enumerate(excel_data.sheet_names):
+        if exclude_sheets and sheet_index in exclude_sheets:
+            print(f"Skipping sheet {sheet_name} (index {sheet_index + 1})")
+            continue
+
+        # Read the sheet into a DataFrame
+        df = pd.read_excel(excel_file, sheet_name=sheet_name)
+
+        # Define the output CSV file path
+        csv_file = os.path.join(output_dir, f"{sheet_name}.csv")
+
+        # Save the DataFrame to a CSV file
+        df.to_csv(csv_file, index=False)
+        print(f"Saved {sheet_name} to {csv_file}")
+
+
+def e57_2_txt(file_path, save_path =None):
+    """
+    Converts E57 point cloud files to TXT format by extracting and saving both point color
+    and point coordinate data.
+
+    Parameters:
+    -----------
+    file_path : str
+        The path to the directory containing E57 files or a specific E57 file.
+    save_path : str, optional
+        The directory where the TXT files will be saved. If not provided, files are saved
+        in the same directory as the input E57 files.
+
+    Returns:
+    --------
+    None
+
+    Notes:
+    ------
+    - Only processes files with the '.e57' extension found in the specified directory.
+    - For each E57 file:
+        - The color data of the points is scaled to a range of 0-255, rounded,
+          and saved in a file named `<basename>_color.txt`.
+        - The point coordinate data is saved in a file named `<basename>_points.txt`
+          with four decimal places.
+    - Both TXT files are saved in the specified or default output directory.
+    - Prints progress messages for each file being processed.
+    """
+
+    if save_path is None:
+        save_path = file_path
+
+    path_templates = os.path.abspath(file_path)
+    e57files = [f for f in os.listdir(path_templates) if f.endswith('.e57')]
+
+    for file in e57files:
+
+        print("processing file {}".format(file))
+
+        pc = e57.read_points(file)
+
+        file_name = os.path.basename(file)
+        file_name = file_name.replace('.e57', '')
+
+        pc_color = 255*pc.color
+        np.savetxt(save_path+"\\"+file_name+"_color.txt", pc_color, fmt='%d')
+        np.savetxt(save_path+"\\"+file_name+"_points.txt", pc.points, fmt='%1.4f')
+
+
+def separate_wind_swell(T_p, v_m, dir_wave, dir_wind, water_depth, h_vm, alpha, beta):
+    omega = 2 * np.pi / T_p
+    k = k_aus_omega(omega, water_depth)
+    c = omega / k
+    indizes_swell = []
+    indizes_wind = []
+
+    v_m = h_vm * v_m
+
+    for T_p_curr, v_m_curr, dir_wave_curr, dir_wind_curr, c_curr, index in zip(
+            T_p.values, v_m.values, dir_wave.values, dir_wind.values, c.values, T_p.index
+    ):
+        dir_wave_curr = dir_wave_curr * 2 * np.pi / 360
+        dir_wind_curr = dir_wind_curr * 2 * np.pi / 360
+        beta_compare = v_m_curr / c_curr * (np.cos(dir_wave_curr - dir_wind_curr)) ** alpha
+
+        if beta_compare < beta:
+            indizes_swell.append(index)
+        else:
+            indizes_wind.append(index)
+
+    return indizes_swell, indizes_wind

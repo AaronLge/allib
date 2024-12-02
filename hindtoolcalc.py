@@ -1,5 +1,4 @@
 import numpy as np
-import general as gl
 import scipy as sc
 import pandas as pd
 import sys
@@ -8,6 +7,11 @@ from sqlite3 import Error
 import os
 import shutil
 import chardet
+import hashlib
+
+
+from libaries import general as gl
+
 
 # %%classes
 class Segment:
@@ -38,23 +42,66 @@ class Segment:
 
 
 class Calculation:
+    """
+    A class for performing calculations and filtering operations on data stored in a SQL database.
 
-    def __init__(self, result=None, basedata=None, filt=None):
+    Attributes:
+        result (any): The result of a calculation or operation.
+        basedata (dict): Metadata about the data, such as database name, table name, and sample rate.
+        filters (list): A list of filters applied to the data.
+
+    Methods:
+        __init__(self, result=None, basedata=None, filters=None):
+            Initializes the Calculation instance with optional result, basedata, and filters.
+
+        initilize_from_db(self, db_path, table_name, colnames, **kwargs):
+            Initializes a dataframe by loading data from a SQL database, with optional filtering by timeframe.
+
+        add_filter(self, colnames=None, mode='range', ranges=None):
+            Adds a filter to the data based on column names and value ranges, and stores the filter in the filters list.
+
+        apply_filters(self, apply_only=None):
+            Applies all added filters and returns the common datetime indices that satisfy all filters.
+
+        create_segment_title(self, mode='verbose', latex=True):
+            Generates titles for segments in the result data, with different verbosity and LaTeX formatting options.
+
+        load_from_db(self, column_names=None, applie_filt=True, colnames_ini=False, indizes=None):
+            Loads a dataframe from the SQL database, optionally applying filters and selecting specific indices.
+    """
+    def __init__(self, result=None, basedata=None, filters=None):
+        """
+        Initializes the Calculation instance with optional result, basedata, and filters.
+
+        Args:
+            result (any, optional): The result of a calculation or operation.
+            basedata (dict, optional): A dictionary containing metadata about the data.
+            filters (list, optional): A list of filters to apply to the data.
+        """
         self.result = result
 
         self.basedata = basedata
         if basedata is None:
             self.basedata = dict()
 
-        self.filt = filt
+        self.filters = filters
 
     def initilize_from_db(self, db_path, table_name, colnames, **kwargs):
-        """initilizes dataframe from sql database at "db_path" by loading the colims specified by colnames in the table "table_name". If colnames is None, all columns are loaded
-         Returns dataframe
+        """
+        Initializes the calculation parameters by loading data from a SQL database, with optional filtering by timeframe.
 
-         optional:
-         timeframe: list of two datetime objects specifying the start and end time of the data to be evaluated
-         """
+        Args:
+            db_path (str): Path to the database.
+            table_name (str): The name of the table to load.
+            colnames (list of str): The columns to load from the table.
+            **kwargs: Optional keyword arguments, including:
+                - timeframe (list): A list of two datetime objects specifying the start and end time.
+                - indizes (datetime index): A custom set of indices to load.
+
+        Returns:
+            pd.DataFrame: The loaded dataframe.
+
+        """
 
         timeframe = kwargs.get('timeframe', None)
         indizes = kwargs.get('indizes', None)
@@ -64,6 +111,9 @@ class Calculation:
 
         if timeframe is not None:
             df = df.loc[timeframe[0]:timeframe[1]]
+            if len(df) == 0:
+                print("   no data found in timeframe")
+                return
 
         self.basedata["dbname"] = db_path
         self.basedata["tablename"] = table_name
@@ -80,30 +130,34 @@ class Calculation:
 
         return df
 
-    def initilize_filter(self, colnames, mode='range', ranges=None):
+    def add_filter(self, colnames=None, mode='range', ranges=None):
         """filters data specified in "basedata" propterty, has to be initilized by using "initilize_from_db". creats "filt" dictionary, that contains:
          indizes_in: datetime index object, with all indizies still in the filtered list
          indizes_out: datetime index object, with all indizies excluded by filtering
          colnames: colnames
          ranges: ranges
 
-        INPUT:
-        colnames: list of stings, columnames to filter by in Dataframe
-        ranges: list of lists, list containing len(colnames) elements of length 2, in fomrmat [a_min, a_max] specifing the range of the filtered data
-                if a_max is None, maximal value of the correspnding values of column spcified by colname in with same index used
+        Args:
+            colnames (list of str, optional): A list of column names to filter by.
+            mode (str, optional): The mode of filtering ('range' or 'nans'). Default is 'range'.
+            ranges (list of lists, optional): The ranges of values to filter by, if mode is 'range'.
 
-        retrun:
-        indizes: datetime index object, with all indizies still in the filtered list"""
+        Returns:
+            dict: The filter information, including indices included and excluded by the filter.
+        """
 
         indizes_full = self.basedata["indizes"]
 
         if colnames is None:
+            colnames = self.basedata["colnames_ini"]
+        if colnames == 'all':
             df_filt = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"])
             colnames = list(df_filt.columns)
         else:
             df_filt = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"], column_names=colnames)
 
-        self.filt = dict()
+        if self.filters is None:
+            self.filters = []
 
         if mode == 'range':
             for i, range_curr in enumerate(ranges):
@@ -114,26 +168,73 @@ class Calculation:
             a_max = [curr[1] for curr in ranges]
 
             df_filt = gl.filter_dataframe(df_filt, colnames, a_min, a_max)
-            self.filt["ranges"] = ranges
-            self.filt["colnames"] = colnames
 
         if mode == 'nans':
             df_filt = df_filt.dropna(how='any')
+            ranges = None
 
         index_filt = df_filt.index
         indizes_in = index_filt.intersection(indizes_full)
         indizes_out = indizes_full.difference(index_filt)
 
-        self.filt["indizes_in"] = indizes_in
-        self.filt["indizes_out"] = indizes_out
-        self.filt["mode"] = mode
+        filt = {}
+        filt["indizes_in"] = indizes_in
+        filt["indizes_out"] = indizes_out
+        filt["mode"] = mode
+        filt["ranges"] = ranges
+        filt["colnames"] = colnames
 
-        return indizes_in
-    
+        self.filters.append(filt)
+        return filt
+
+    def apply_filters(self, apply_only=None):
+        """
+        Applies all added filters and returns the common datetime indices that satisfy all filters.
+
+        Args:
+            apply_only (list, optional): A list of filter indices to apply. If None, applies all filters.
+
+        Returns:
+            list: A sorted list of datetime indices that satisfy all filters.
+
+        """
+
+        if self.filters is None:
+            print("no filters specified")
+            return
+        else:
+
+            if apply_only is None:
+                datetime_lists = [filt["indizes_in"] for filt in self.filters]
+            else:
+                datetime_lists = [filt["indizes_in"] for filt in self.filters]
+                datetime_lists = [datetime_lists[i] for i in range(len(datetime_lists)) if i+1 in apply_only]
+
+            if datetime_lists:
+                common_dates = set(datetime_lists[0])
+                for dates in datetime_lists[1:]:
+                    common_dates &= set(dates)
+
+                # Convert to a DatetimeIndex if needed
+                common_dates = pd.DatetimeIndex(common_dates)
+            else:
+                common_dates = pd.DatetimeIndex([])  # empty if no lists are provided
+
+        return sorted(common_dates)
+
     def create_segment_title(self, mode='verbose', latex=True):
-        """"if the data stored in result is list of "Segment",  it exports a list of title in Latex format
-            if mode='general', Segment.basedata has to be initilized
-        """""
+        """
+        Generates titles for segments in the result data, with different verbosity and LaTeX formatting options.
+        Segment.basedata has to be initilized
+
+        Args:
+            mode (str, optional): The mode for generating titles ('verbose', 'standard', or 'sparse'). Default is 'verbose'.
+            latex (bool, optional): Whether to format the titles in LaTeX. Default is True.
+
+        Returns:
+            list of str: A list of segment titles.
+
+        """
 
         titles = []
         for segment_curr in self.result:
@@ -143,9 +244,9 @@ class Calculation:
 
             if segment_curr.angle_name is not None:
                 if latex:
-                    header += r"\small " f"'{segment_curr.angle_name}': {segment_curr.angles[0]}° to {segment_curr.angles[1]}°"
+                    header += r"\centering \small " f"'{segment_curr.angle_name}': {round(segment_curr.angles[0])}° to {round(segment_curr.angles[1])}°"
                 else:
-                    header += f"'{segment_curr.angle_name}':{segment_curr.angles[0]}° to {segment_curr.angles[1]}°"
+                    header += f"'{segment_curr.angle_name}':{round(segment_curr.angles[0])}° to {round(segment_curr.angles[1])}°"
 
             else:
                 header += "omnidirectional"
@@ -155,7 +256,7 @@ class Calculation:
                 timeframe = self.basedata["db_timeframe"]
                 sample_rate = self.basedata["sample_rate"]
                 if latex:
-                    underscore = (r"\scriptsize " + f"samples: {N_exp:.2e} ({round(N_exp / N_ges * 100, 1)}\%), " +
+                    underscore = (r"\centering \scriptsize " + f"samples: {N_exp:.2e} ({round(N_exp / N_ges * 100, 1)}\%), " +
                                   f"{timeframe[0].round('1d').date()} to {timeframe[1].round('1d').date()}, " +
                                   f"d_t: {sample_rate.total_seconds()} s")
                 else:
@@ -166,9 +267,9 @@ class Calculation:
                 N_ges = self.basedata["N_rows"]
 
                 if latex:
-                    underscore = r"\scriptsize " + f"samples: {N_exp:.2e} ({round(N_exp / N_ges * 100, 1)}%)"
+                    underscore = r"\centering \scriptsize " + f"samples: {N_exp:.2e} ({round(N_exp / N_ges * 100, 1)}%)"
                 else:
-                    underscore = f"samples: {N_exp:.2e} ({round(N_exp / N_ges * 100, 1)}%)"
+                    underscore = f"\centering samples: {N_exp:.2e} ({round(N_exp / N_ges * 100, 1)}%)"
 
             elif mode == "sparse":
                 underscore = None
@@ -182,31 +283,45 @@ class Calculation:
                 titles.append(header)
         return titles
 
-    def load_from_db(self, column_names=None, applie_filt=True, colnames_ini=False, **kwargs):
-        """wrapper for export_df_from_sql in general lib, takes db_name and tablename from Calculation information, applies filter if it is there"""
+    def load_from_db(self, column_names=None, applie_filt=True, colnames_ini=False, indizes=None):
+        """
+        Loads a dataframe from the SQL database, optionally applying filters and selecting specific indices.
+
+        Args:
+            column_names (list of str, optional): The column names to load. Defaults to None.
+            applie_filt (bool, optional): Whether to apply filters. Default is True.
+            colnames_ini (bool, optional): Whether to use the initial column names from the basedata. Default is False.
+            indizes (datetime index, optional): A list of specific indices to load. Default is None.
+
+        Returns:
+            pd.DataFrame: The loaded dataframe.
+        """
         if colnames_ini:
             column_names = self.basedata["colnames_ini"]
 
-        df = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"], column_names=column_names)
+        if (self.filters is None) or not applie_filt:
+            indizes_full = self.basedata["indizes"]
 
-        if (self.filt is None) or not applie_filt:
-            df = df[df.index.isin(self.basedata["indizes"])]
         else:
-            df = df[df.index.isin(self.filt["indizes_in"])]
+            indizes_full = self.apply_filters()
+
+        if indizes is not None:
+            indx_not_there = set(indizes) - set(indizes_full)
+
+            if len(indx_not_there) > 0:
+                print(f"indizes {indx_not_there} requested but not in dataset, they are excluded")
+
+            indx_requested = set(indizes) & set(indizes_full)
+            indx_requested = list(indx_requested)
+
+        else:
+            indx_requested = indizes_full
+
+        indx_requested = sorted(indx_requested)
+
+        df = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"], column_names=column_names, indizes=indx_requested)
 
         return df
-
-
-class DataCol:
-    def __init__(self, name_data=str(), name_plot=str(), db_name=None, table_raw=None, symbol=None):
-        self.name_data = name_data
-        self.name_plot = name_plot
-        self.db_name = db_name
-
-        if table_raw is None:
-            self.table_raw = []
-
-        self.symbol = symbol
 
 
 # %% general functions
@@ -415,149 +530,6 @@ def quantiles(perc_low, middle, perc_up, quant_low, quant_up):
             f"    quantile not possible for segment, check if graph is monotone in 'zone_line' or if percentiles cross in the frequency band. quantile is set to mean")
 
     return quantile
-
-
-# def MetOcan_to_sqlDB(Paths, db_name, resample_rate):
-#     """accepts Dict of csv paths (Metocean Format!) and stores the individual data as well a resampled version in
-#     a combined table to a sql database. If the database already exists, it will be overwritten
-#
-#     Parameters:
-#         Paths: dict with the keys: {path_wave, path_atmo, path_ocean} and the corresponding paths to the csv files, can be None
-#         db_name: sting to name the database, with path if necessary
-#         resample_rate: resample rate in the fomrat: float {y,d,s,m} for year, day, second, month. Example: "1d"
-#
-#     Return:
-#         sql Database at the desired path
-#     """
-#
-#     def join_dataframes_by_index(dfs_all):
-#         # Filter out empty dataframes
-#         dataframes = [df for df in dfs_all if not df.empty]
-#
-#         # Perform the join operation on the non-empty dataframes
-#         if dataframes:
-#             res = dataframes[0]
-#             for df in dataframes[1:]:
-#                 res = res.join(df, how='inner')
-#             return res
-#         else:
-#             return pd.DataFrame()  # Return
-#
-#     def read_MetaData(file):
-#         global name
-#         Names = []
-#         Values = []
-#         with open(file) as input_file:
-#             for _ in range(14):
-#                 line = input_file.readline()
-#                 line = line.replace('\n', '')
-#                 line = line.replace('"', '')
-#                 splited = line.split('\t')
-#                 name = splited[0]
-#                 value = splited[-1][2:]
-#                 Names.append(name)
-#                 Values.append(value)
-#
-#         return Names, Values
-#
-#     NAMES = []
-#     VALUES = []
-#     db_path = os.path.dirname(Paths[list(Paths.keys())[0]]) + "/" + db_name
-#     db_exists = os.path.exists(db_path)
-#
-#     if db_exists:
-#         overwrite = input(f"    Database {db_path} already exists, overwrite? (y/n)")
-#         if overwrite == 'y':
-#             os.remove(db_path)
-#         else:
-#             return None
-#
-#     conn = sqlite3.connect(db_path)
-#
-#     if Paths["path_wave"] is not None:
-#         print("    wave data found")
-#
-#         df_wave_NAN = pd.read_csv(Paths["path_wave"], skiprows=15, na_filter=False)
-#         df_wave = df_wave_NAN.dropna(how='any')
-#         df_wave.set_index('datetime (ISO 8601) [UTC]', inplace=True)
-#         df_wave.index = pd.to_datetime(df_wave.index)
-#
-#         temp = read_MetaData(Paths["path_wave"])
-#         temp[0].append("NANs")
-#         temp[1].append(len(df_wave_NAN) - len(df_wave))
-#         temp[0].insert(0, "DataSet")
-#         temp[1].insert(0, "Waves Data")
-#         NAMES.append(temp[0])
-#         VALUES.append(temp[1])
-#
-#         df_wave.to_sql('Waves', conn)
-#
-#         df_wave_resample = df_wave.resample(resample_rate).mean()
-#
-#     else:
-#         df_wave_resample = pd.DataFrame()
-#         print("    no wave data found")
-#
-#     if Paths["path_atmo"] is not None:
-#         print('    atmospheric data found')
-#
-#         df_wind_NAN = pd.read_csv(Paths["path_atmo"], skiprows=15, na_filter=False)
-#         df_wind = df_wind_NAN.dropna(how='any')
-#         df_wind.set_index('datetime (ISO 8601) [UTC]', inplace=True)
-#         df_wind.index = pd.to_datetime(df_wind.index)
-#
-#         temp = read_MetaData(Paths["path_atmo"])
-#         temp[0].append("NANs")
-#         temp[1].append(len(df_wave_NAN) - len(df_wave))
-#         temp[0].insert(0, "DataSet")
-#         temp[1].insert(0, "Athmospheric Data")
-#         NAMES.append(temp[0])
-#         VALUES.append(temp[1])
-#
-#         df_wind.to_sql('Athmosphere', conn)
-#
-#         df_wind_resample = df_wind.resample(resample_rate).mean()
-#
-#     else:
-#         df_wind_resample = pd.DataFrame()
-#         print("    no Athmospheric Data data found")
-#
-#     if Paths["path_ocean"] is not None:
-#         print('    oceanic data found')
-#         df_water_NAN = pd.read_csv(Paths["path_ocean"], skiprows=15, na_filter=False)
-#         df_water = df_water_NAN.dropna(how='any')
-#         df_water.set_index('datetime (ISO 8601) [UTC]', inplace=True)
-#         df_water.index = pd.to_datetime(df_water.index)
-#         temp = read_MetaData(Paths["path_ocean"])
-#         temp[0].append("NANs")
-#         temp[1].append(len(df_wave_NAN) - len(df_wave))
-#         temp[0].insert(0, "DataSet")
-#         temp[1].insert(0, "Ocean Data")
-#         NAMES.append(temp[0])
-#         VALUES.append(temp[1])
-#
-#         df_water.to_sql('Ocean', conn)
-#         df_water_resample = df_water.resample(resample_rate).mean()
-#     else:
-#         df_water_resample = pd.DataFrame()
-#         print("    no oceanic data found")
-#
-#     df_ges = join_dataframes_by_index([df_wave_resample, df_wind_resample, df_water_resample])
-#
-#     df_ges.to_sql('Combined', conn)
-#
-#     # Metadata
-#
-#     df_Meta = pd.DataFrame(columns=NAMES[0][1:], index=[values[0] for values in VALUES])
-#
-#     for values in VALUES:
-#         df_Meta.loc[values[0], :] = values[1:]
-#
-#     df_Meta.to_sql('MetaData', conn)
-#
-#     conn.close()
-#
-#     return db_path
 
 
 def csv_to_sqlDB(path_csvs, db_name, resample_rate, data_kind='MetOcean', encoding='auto', nans=None, skiprows=None, delimiter=';', dayfirst=False, datetime_mode='single_col', low_memory=True, drop_rows=None):
@@ -1039,7 +1011,6 @@ def DEL_points(DEL, v_m, v_m_edges, design_life, N_ref, SN_slope):
 
     return Table, Added
 
-
 def histogramm(x, x_max=None, x_min=None, auto_size=True, bin_size=None):
     bin_size_soll = bin_size
 
@@ -1050,10 +1021,11 @@ def histogramm(x, x_max=None, x_min=None, auto_size=True, bin_size=None):
         x_max = np.max(x)
 
     # get significant Digits
-    x_str = [str(value) for value in x]
-    lenths = [len(dig.split('.')[1]) for dig in x_str]
-    sig_dig = max(lenths)
-    if sig_dig > 3: sig_dig = 3
+    # x_str = [str(value) for value in x]
+    # lenths = [len(dig.split('.')[1]) for dig in x_str]
+    # sig_dig = max(lenths)
+    sig_dig = gl.get_significant_digits(x)
+    if sig_dig > 3: sig_dig = 2
 
     # get minmal distance
     x_values = np.sort(x)
@@ -1103,7 +1075,6 @@ def weibull_fit(x):
     prob = np.array(count) / ((sum(count)) * bin_size)
 
     return bin_size, center, prob, weibull, params
-
 
 
 def cross_correlation(VM_grid, HS_values, HS_grid, TP_values, fill_range=None):
@@ -1166,8 +1137,11 @@ def cross_correlation(VM_grid, HS_values, HS_grid, TP_values, fill_range=None):
         Vm_interp_left = Vm_res[idx_interp_left]
         Vm_interp_right = Vm_res[idx_interp_right]
 
-        Vm_res[idx_data_left:idx_interp_left] = np.linspace(Vm_data_left, Vm_interp_left, idx_interp_left - idx_data_left)
-        Vm_res[idx_interp_right:idx_data_right] = np.linspace(Vm_interp_right, Vm_data_right, idx_data_right - idx_interp_right)
+        if (idx_interp_left - idx_data_left) >= 0:
+            Vm_res[idx_data_left:idx_interp_left] = np.linspace(Vm_data_left, Vm_interp_left, idx_interp_left - idx_data_left)
+
+        if (idx_data_right - idx_interp_right) >= 0:
+            Vm_res[idx_interp_right:idx_data_right] = np.linspace(Vm_interp_right, Vm_data_right, idx_data_right - idx_interp_right)
 
     return Vm_res, TP_res
 
@@ -1524,6 +1498,8 @@ def extreme_contures_blackbox(Hs, Tp, T_return):
     return out
 
 
+
+
 # %% macro functions
 def calc_VMHS(Vm, Hs, angle, angle_grid,
               N_grid=100,
@@ -1802,7 +1778,7 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
         else:
             vm_grid = None
 
-        Vm_res, TP_res = cross_correlation(VM_grid.values, HS_values,HS_grid.values, TP_values, fill_range=vm_grid)
+        Vm_res, TP_res = cross_correlation(VM_grid.values, HS_values, HS_grid.values, TP_values, fill_range=vm_grid)
 
         vmtp_curr_data['x'] = Vm_res
         vmtp_curr_data['mean result plot'] = TP_res
@@ -1834,7 +1810,7 @@ def calc_Roseplot(angle, magnitude, angle_segments):
     return counts, r_edges
 
 
-def calc_RWI(Hs, Tp, angle, angle_grid, f_0):
+def calc_RWI(Hs, Tp, angle, angle_grid, f_0, gamma_mode='default'):
     """retruns list of RWI segment objects for all segments in angle_grid, if angle_grid is None, omnidirectional is returned
 
     Arguments:
@@ -1855,7 +1831,7 @@ def calc_RWI(Hs, Tp, angle, angle_grid, f_0):
 
     if angle_grid is None:
 
-        RWI_list = RWI(Hs, Tp, f_0)
+        RWI_list = RWI(Hs, Tp, f_0, gamma_mode=gamma_mode)
 
         RWI_df = pd.DataFrame(RWI_list, index=Hs.index)
 
@@ -1874,7 +1850,7 @@ def calc_RWI(Hs, Tp, angle, angle_grid, f_0):
 
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
 
-            RWI_list = RWI(df_filt[Hs.name], df_filt[Tp.name], f_0)
+            RWI_list = RWI(df_filt[Hs.name], df_filt[Tp.name], f_0, gamma_mode=gamma_mode)
 
             RWI_df = pd.DataFrame(RWI_list, index=df_filt[Hs.name].index)
 
@@ -2175,7 +2151,7 @@ def calc_ExtemeValues(x, angles, angle_grid, T_return_single=None, conf_inter_mo
                                freq_samp=freq_samp,
                                N_itter=N_itter)
 
-        temp = Segment(0, angles=None, result=result, colnames={'x': x.name, 'angle': angles.name}, angle_name=None, indizes=list(x.index))
+        temp = Segment(0, angles=None, result=result, colnames={'x': x.name, 'angle':  None}, angle_name=None, indizes=list(x.index))
         Data_Out.append(temp)
 
     else:
@@ -2216,21 +2192,98 @@ def update_DEL_db(db_path, Hs, Tp, gamma, proj_path=None, input_path=None, exe_p
     else:
         shutil.copy(input_path, exe_path)
 
-    Var_lua = gl.read_lua_values(JBOOST_proj_path_new, ['seabed_level', 'design_life', 'N_ref', 'SN_slope', 'res_Nodes'])
+    Var_lua = gl.read_lua_values(JBOOST_proj_path_new, ['seabed_level',
+                                                        'design_life',
+                                                        'N_ref',
+                                                        'SN_slope',
+                                                        'res_Nodes',
+                                                        'foundation_superelement',
+                                                        'found_stiff_trans',
+                                                        'found_stiff_rotat',
+                                                        'found_stiff_coupl',
+                                                        'found_mass_trans',
+                                                        'found_mass_rotat',
+                                                        'found_mass_coupl',
+                                                        'shearCorr',
+                                                        'res_NumEF',
+                                                        'hydro_add_mass',
+                                                        'water_density',
+                                                        'water_level',
+                                                        'seabed_level',
+                                                        'growth_density',
+                                                        'frequRange',
+                                                        'frequRangeSolution',
+                                                        'maxEFcalc',
+                                                        'damping_struct',
+                                                        'damping_tower',
+                                                        'damping_aerodyn',
+                                                        'tech_availability',
+                                                        'h_refwindspeed',
+                                                        'h_hub',
+                                                        'height_exp',
+                                                        'TM02_period',
+                                                        'refineScatter',
+                                                        'fullScatter',
+                                                        'WindspecDataBase'
+                                                        ])
 
-    Meta_Curr = {"d": -Var_lua["seabed_level"],
+    # open input and create hash value of input file
+    with open(input_path) as input_file:
+        lines = input_file.read()
+        lines = lines.split('\n')
+        processed_lines = [
+            line.split('--')[0].strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith("local")
+        ]
+        processed_lines = [ line for line in processed_lines if len(line) > 0]
+        combined_string = ''.join(processed_lines)
+        combined_string = combined_string.replace('\t', '')
+        hash_value = hashlib.md5(combined_string.encode()).hexdigest()
+
+    Meta_Curr = {
+                 'input_path': input_path,
+                 'input_hash': hash_value,
+                 "d": -Var_lua["seabed_level"],
                  "design_life": Var_lua["design_life"],
                  "N_ref": Var_lua["N_ref"],
                  "SN_slope": Var_lua["SN_slope"],
                  "Hs": Hs.name,
                  "Tp": Tp.name,
                  "gamma": gamma.name,
-                 'input': input_path}
+                 "foundation_superelement":Var_lua["foundation_superelement"],
+                 "found_stiff_trans": Var_lua["found_stiff_trans"],
+                 "found_stiff_rotat": Var_lua["found_stiff_rotat"],
+                 "found_stiff_coupl": Var_lua["found_stiff_coupl"],
+                 "found_mass_trans": Var_lua["found_mass_trans"],
+                 "found_mass_rotat": Var_lua["found_mass_rotat"],
+                 "found_mass_coupl": Var_lua["found_mass_coupl"],
+                 "shearCorr": Var_lua["shearCorr"],
+                 "res_NumEF": Var_lua["res_NumEF"],
+                 "hydro_add_mass": Var_lua["hydro_add_mass"],
+                 "water_density": Var_lua["water_density"],
+                 "water_level": Var_lua["water_level"],
+                 "seabed_level": Var_lua["seabed_level"],
+                 "growth_density": Var_lua["growth_density"],
+                 "frequRange": Var_lua["frequRange"],
+                 "frequRangeSolution": Var_lua["frequRangeSolution"],
+                 "maxEFcalc": Var_lua["maxEFcalc"],
+                 "damping_struct": Var_lua["damping_struct"],
+                 "damping_tower": Var_lua["damping_tower"],
+                 "damping_aerodyn": Var_lua["damping_aerodyn"],
+                 "tech_availability": Var_lua["tech_availability"],
+                 "h_refwindspeed": Var_lua["h_refwindspeed"],
+                 "h_hub": Var_lua["h_hub"],
+                 "height_exp": Var_lua["height_exp"],
+                 "TM02_period": Var_lua["TM02_period"],
+                 "refineScatter": Var_lua["refineScatter"],
+                 "fullScatter": Var_lua["fullScatter"],
+                 "WindspecDataBase": Var_lua["WindspecDataBase"]}
 
     print(f'   used variables from {proj_path}:')
     print(f"   {gl.write_dict(Var_lua)}")
 
-    table_name = gl.check_meta_in_valid_db(db_path, Meta_Curr)
+    table_name = gl.check_meta_in_valid_db(db_path, Meta_Curr, exclude_columns=['input_path'])
 
     if len(table_name) != 0:
         table_name = table_name[0]
