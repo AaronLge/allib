@@ -1937,3 +1937,38 @@ def separate_wind_swell(T_p, v_m, dir_wave, dir_wind, water_depth, h_vm, alpha, 
             indizes_wind.append(index)
 
     return indizes_swell, indizes_wind
+
+def fill_nans(data):
+    """
+    Fills sections of NaNs between numbers with the last valid number.
+    NaNs at the start or end are ignored.
+
+    Parameters:
+    data (list): A list containing numbers and np.nan values.
+
+    Returns:
+    list: A list with NaN sections filled.
+    """
+    data = list(data)
+    if not data:
+        return data
+
+    # Convert to a NumPy array for easier processing
+    arr = np.array(data, dtype=np.float64)
+
+    # Identify where numbers and NaNs are
+    is_nan = np.isnan(arr)
+
+    # Find indices of non-NaN values
+    valid_indices = np.where(~is_nan)[0]
+
+    if len(valid_indices) == 0:
+        return data  # If no valid numbers, return original list
+
+    # Fill NaNs between valid indices with the last valid number
+    for start, end in zip(valid_indices[:-1], valid_indices[1:]):
+        if end - start > 1:
+            # Fill the gap with the last valid number
+            arr[start + 1:end] = arr[start]
+
+    return arr.tolist()

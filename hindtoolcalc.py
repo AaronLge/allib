@@ -373,6 +373,8 @@ def condensation(x, y, grid,
 
     averaged.name = 'averaged'
 
+    averaged[:] = gl.fill_nans(averaged.values)
+
     x_bins = averaged.index
 
     # percentiles
@@ -385,7 +387,7 @@ def condensation(x, y, grid,
         percentiles.append(perc_data_curr)
 
     # average correction
-    averaged= averaged * average_correction
+    averaged = averaged * average_correction
 
     for perc_curr in percentiles:
         perc_curr = perc_curr * average_correction
@@ -394,6 +396,7 @@ def condensation(x, y, grid,
 
     plot_line = (x_bins > zone_line[0]) & (
             x_bins < zone_line[1])
+
 
     # make monoton
     if make_monotone:
@@ -1113,7 +1116,12 @@ def cross_correlation(VM_grid, HS_values, HS_grid, TP_values, fill_range=None):
     VM_unique = np.delete(VM_grid, list(duplicates))
 
     # Perform interpolation on unique values
-    Vm_res = np.interp(HS_grid, HS_unique, VM_unique, left=float('nan'), right=float('nan'))
+    if len(VM_unique) > 1:
+        Vm_res = np.interp(HS_grid, HS_unique, VM_unique, left=float('nan'), right=float('nan'))
+    else:
+        Vm_res = np.full_like(HS_grid, np.nan, dtype=float)
+        nearest_idx = np.abs(HS_grid - HS_unique[0]).argmin()  # Find the nearest x to xp[0]
+        Vm_res[nearest_idx] = VM_unique[0]
 
     TP_res[np.where(~np.isnan(Vm_res))[0]] = TP_values[np.where(~np.isnan(Vm_res))[0]]
 
@@ -1737,8 +1745,6 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
     - needs Segment.result object to be a pd.Dataframe with "mean result plot" and "x" in vmhs result dataframes and "x" and "mean result plot" or "quantile" in hstp dataframes ("quantile" overwrites "mean result plot")!)
     - indizes (from basedata) needs to be intialized for counts!
     """
-
-    import matplotlib.pyplot as plt
 
     VMTP = []
     num = 0
@@ -2587,6 +2593,8 @@ def calc_extreme_contures(Hs, Tp, angle, angle_grid, T_return):
             num = num + 1
 
     return Data_Out
+
+
 
 # %% DataBaseHandling
 
