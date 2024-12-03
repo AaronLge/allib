@@ -1923,7 +1923,7 @@ def separate_wind_swell(T_p, v_m, dir_wave, dir_wind, water_depth, h_vm, alpha, 
     indizes_swell = []
     indizes_wind = []
 
-    v_m = h_vm * v_m
+    #v_m = h_vm * v_m
 
     for T_p_curr, v_m_curr, dir_wave_curr, dir_wind_curr, c_curr, index in zip(
             T_p.values, v_m.values, dir_wave.values, dir_wind.values, c.values, T_p.index
