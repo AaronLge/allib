@@ -18,7 +18,7 @@ from matplotlib.colors import Normalize
 import pandas as pd
 from matplotlib import rcParams
 
-from libaries import general as gl
+from allib import general as gl
 
 
 # %% classes
