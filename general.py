@@ -16,6 +16,148 @@ from matplotlib.backends.backend_pdf import PdfPages
 import decimal
 import e57
 
+# %% db handling
+def export_df_from_sql(db_file, table_name, column_names=None, timeframe=None, indizes=None):
+    """
+    Load specified columns or all columns from a table in an SQLite database and return as a pandas DataFrame,
+    if tables index is specified, it is set as the index of the dataframe
+
+    Parameters:
+    - db_file (str): Path to the SQLite database file.
+    - table_name (str): Name of the table to query.
+    - column_names (list of str, optional): List of column names to retrieve. If None, retrieves all columns.
+    - timeframe: list, optional: [time_start, time_end], must be pd.DateTime object, also indizes of dataframe must be read as datetime objects, is ignored otherwise
+    - indizes: list, optional: list of indizes, (dependent on index format of df) is applied AFTER timeframe!
+
+    Returns:
+    - pandas.DataFrame: DataFrame containing the query results, including the row index as a column.
+
+    Raises:
+    - ValueError: If the table or columns do not exist.
+    """
+    try:
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+
+        # Check if table exists
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}' ORDER BY ROWID;")
+        if not cursor.fetchone():
+            raise ValueError(f"Table '{table_name}' does not exist in the database.")
+
+        # Check if specified columns exist in the table
+        cursor.execute(f"PRAGMA table_info({table_name});")
+        columns_info = cursor.fetchall()
+        table_columns = [info[1] for info in columns_info]
+
+        if column_names:
+            for col in column_names:
+                if col not in table_columns:
+                    raise ValueError(f"Column '{col}' does not exist in table '{table_name}'.")
+            # Enclose column names with special characters in double quotes
+            cols = ', '.join([f'"{col}"' for col in column_names])
+
+        else:
+            # Enclose column names with special characters in double quotes
+            cols = ', '.join([f'"{col}"' for col in table_columns[1:]])
+
+        # Add ROWID to the columns to retrieve
+        query = f"SELECT {cols} FROM {table_name};"
+        df = pd.read_sql_query(query, conn)
+
+        # set index of sql database to index of dataframe
+        cursor.execute(f"PRAGMA index_list('{table_name}');")
+        indexes = cursor.fetchall()
+        cursor.execute(f"PRAGMA index_info('{indexes[0][1]}');")
+
+        index_info = cursor.fetchall()
+
+        if len(index_info) > 0:
+
+            index_col_name = index_info[0][2]
+
+            cursor.execute(f'SELECT "{index_col_name}" FROM "{table_name}" ORDER BY ROWID;')
+            index_col = cursor.fetchall()
+
+            index_col = [info[0] for info in index_col]
+
+            try:
+                index_col = pd.to_datetime(index_col)
+            except ValueError:
+                print("could not convert index to datetime object")
+                index_col = index_col
+            df.index = index_col
+
+            if timeframe is not None:
+                df = df.loc[timeframe[0]:timeframe[1]]
+
+        if indizes is not None:
+            df = df.loc[indizes]
+
+        return df
+
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
+
+def export_colnames_from_db(database_path):
+    # Connect to the SQLite database
+    conn = sqlite3.connect(database_path)
+    cursor = conn.cursor()
+
+    # Dictionary to store table names and their respective column names
+    table_columns = {}
+
+    # Get the list of all tables in the database
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = cursor.fetchall()
+
+    # Iterate over each table and get the column names
+    for table in tables:
+        table_name = table[0]
+
+        # Use double quotes to escape the table name
+        cursor.execute(f'PRAGMA table_info("{table_name}");')
+        columns = cursor.fetchall()
+        column_names = [column[1] for column in columns]  # Column names are in the 2nd index
+
+        table_columns[table_name] = column_names
+
+    # Close the connection
+    conn.close()
+
+    return table_columns
+
+
+def add_dataframe_to_db(db_path, table_name, df):
+    """
+       Loads the existing table from the SQLite database into a DataFrame, combines it with the new DataFrame,
+       and writes the updated data back to the database.
+
+       Parameters:
+       db_path (str): Path to the SQLite database file.
+       table_name (str): Name of the table to read and write data to.
+       df (pd.DataFrame): The DataFrame to be combined with the existing data.
+       """
+    try:
+        existing_df = export_df_from_sql(db_path, table_name)
+        combined_df = merge_dataframes(existing_df, df)
+    except ValueError:
+        combined_df = df
+
+    # Create a connection to the SQLite database
+    conn = sqlite3.connect(db_path)
+
+    # Insert the updated DataFrame into the table
+    combined_df.to_sql(table_name, conn, if_exists='replace')
+
+    # Close the connection
+    conn.close()
+
+
+# %% sonstiges
 def model_regression(x: pd.core.series.Series, y: pd.core.series.Series,
                      **kwargs) -> skl.linear_model._base.LinearRegression:
     """creates regression model of the given x- and y-Series of the certain degree with "include_bias = False"
@@ -148,6 +290,7 @@ def predict_regression(model: skl.linear_model._base.LinearRegression, x_pred: n
     y_pred = model.predict(x_pred)
 
     return y_pred
+
 
 def filter_dataframe(dataframe, column_names: str | list, a_min: float | list,
                      a_max: float | list) -> pd.core.frame.DataFrame | list:
@@ -618,120 +761,6 @@ def xlsx2dict(file_path):
 
     return sheets_dict
 
-
-def export_df_from_sql(db_file, table_name, column_names=None, timeframe=None, indizes=None):
-    """
-    Load specified columns or all columns from a table in an SQLite database and return as a pandas DataFrame,
-    if tables index is specified, it is set as the index of the dataframe
-
-    Parameters:
-    - db_file (str): Path to the SQLite database file.
-    - table_name (str): Name of the table to query.
-    - column_names (list of str, optional): List of column names to retrieve. If None, retrieves all columns.
-    - timeframe: list, optional: [time_start, time_end], must be pd.DateTime object, also indizes of dataframe must be read as datetime objects, is ignored otherwise
-    - indizes: list, optional: list of indizes, (dependent on index format of df) is applied AFTER timeframe! 
-    
-    Returns:
-    - pandas.DataFrame: DataFrame containing the query results, including the row index as a column.
-
-    Raises:
-    - ValueError: If the table or columns do not exist.
-    """
-    try:
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-
-        # Check if table exists
-        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}' ORDER BY ROWID;")
-        if not cursor.fetchone():
-            raise ValueError(f"Table '{table_name}' does not exist in the database.")
-
-        # Check if specified columns exist in the table
-        cursor.execute(f"PRAGMA table_info({table_name});")
-        columns_info = cursor.fetchall()
-        table_columns = [info[1] for info in columns_info]
-
-        if column_names:
-            for col in column_names:
-                if col not in table_columns:
-                    raise ValueError(f"Column '{col}' does not exist in table '{table_name}'.")
-            # Enclose column names with special characters in double quotes
-            cols = ', '.join([f'"{col}"' for col in column_names])
-
-        else:
-            # Enclose column names with special characters in double quotes
-            cols = ', '.join([f'"{col}"' for col in table_columns[1:]])
-
-        # Add ROWID to the columns to retrieve
-        query = f"SELECT {cols} FROM {table_name};"
-        df = pd.read_sql_query(query, conn)
-
-        # set index of sql database to index of dataframe
-        cursor.execute(f"PRAGMA index_list('{table_name}');")
-        indexes = cursor.fetchall()
-        cursor.execute(f"PRAGMA index_info('{indexes[0][1]}');")
-
-        index_info = cursor.fetchall()
-
-        if len(index_info) > 0:
-
-            index_col_name = index_info[0][2]
-
-            cursor.execute(f'SELECT "{index_col_name}" FROM "{table_name}" ORDER BY ROWID;')
-            index_col = cursor.fetchall()
-
-            index_col = [info[0] for info in index_col]
-
-            try:
-                index_col = pd.to_datetime(index_col)
-            except:
-                print("could not convert index to datetime object")
-                index_col = index_col
-            df.index = index_col
-
-            if timeframe is not None:
-                df = df.loc[timeframe[0]:timeframe[1]]
-
-        if indizes is not None:
-            df = df.loc[indizes]
-
-        return df
-
-    except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-        raise
-    finally:
-        if conn:
-            conn.close()
-
-
-def export_colnames_from_db(database_path):
-    # Connect to the SQLite database
-    conn = sqlite3.connect(database_path)
-    cursor = conn.cursor()
-
-    # Dictionary to store table names and their respective column names
-    table_columns = {}
-
-    # Get the list of all tables in the database
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    tables = cursor.fetchall()
-
-    # Iterate over each table and get the column names
-    for table in tables:
-        table_name = table[0]
-
-        # Use double quotes to escape the table name
-        cursor.execute(f'PRAGMA table_info("{table_name}");')
-        columns = cursor.fetchall()
-        column_names = [column[1] for column in columns]  # Column names are in the 2nd index
-
-        table_columns[table_name] = column_names
-
-    # Close the connection
-    conn.close()
-
-    return table_columns
 
 
 def auto_ticks(start, end, num_ticks=10, fix_end=False, edges=False):
@@ -1923,7 +1952,7 @@ def separate_wind_swell(T_p, v_m, dir_wave, dir_wind, water_depth, h_vm, alpha, 
     indizes_wind = []
 
     #v_m = h_vm * v_m
-
+    compare_list = []
     for T_p_curr, v_m_curr, dir_wave_curr, dir_wind_curr, c_curr, index in zip(
             T_p.values, v_m.values, dir_wave.values, dir_wind.values, c.values, T_p.index
     ):
@@ -1931,12 +1960,18 @@ def separate_wind_swell(T_p, v_m, dir_wave, dir_wind, water_depth, h_vm, alpha, 
         dir_wind_curr = dir_wind_curr * 2 * np.pi / 360
         beta_compare = v_m_curr / c_curr * (np.cos(dir_wave_curr - dir_wind_curr)) ** alpha
 
-        if beta_compare < beta:
-            indizes_swell.append(index)
+        if np.isnan(beta_compare):
+            continue
         else:
-            indizes_wind.append(index)
+            if beta_compare < beta:
+                indizes_swell.append(index)
+            else:
+                indizes_wind.append(index)
 
-    return indizes_swell, indizes_wind
+            compare_list.append(beta_compare)
+
+    return indizes_swell, indizes_wind, compare_list
+
 
 def fill_nans(data):
     """
@@ -1972,3 +2007,7 @@ def fill_nans(data):
             arr[start + 1:end] = arr[start]
 
     return arr.tolist()
+
+
+
+

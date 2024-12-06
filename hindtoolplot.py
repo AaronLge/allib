@@ -20,6 +20,8 @@ from matplotlib import rcParams
 
 from allib import general as gl
 
+run_path = os.path.dirname(os.path.realpath(__file__))
+
 
 # %% classes
 
@@ -55,7 +57,8 @@ class Bar:
 
 
 class Scatter:
-    def __init__(self, x, y, cmap=None, color='black', cmap_mode='density', c=None, alpha=1, size=None, label=None, cbar=None, cbar_label=None, yy_side='left', spinecolor=None, cmap_norm=None, cbar_label_fontsize=None, zorder=None, marker='o'):
+    def __init__(self, x, y, cmap=None, color='black', cmap_mode='density', c=None, alpha=1, size=None, label=None, cbar=None, cbar_label=None, yy_side='left', spinecolor=None,
+                 cmap_norm=None, cbar_label_fontsize=None, zorder=None, marker='o', cbar_extraticks=None):
         self.x = x
         self.y = y
         self.color = color
@@ -73,10 +76,12 @@ class Scatter:
         self.cbar_label_fontsize = cbar_label_fontsize
         self.zorder = zorder
         self.marker = marker
+        self.cbar_extraticks = cbar_extraticks
 
 class Tile:
     def __init__(self, num, errorbar=None, bar=None, textbox=None, lines=None, scatter=None, title=None, x_label=None, y_label=None, grid=None, x_lim=(None, None),
-                 y_lim=(None, None), x_norm='lin', y_norm='lin', spinecolor_left=None, spinecolor_right=None, y_label_right=None, legend='auto', legend_loc="lower right"):
+                 y_lim=(None, None), x_norm='lin', y_norm='lin', spinecolor_left=None, spinecolor_right=None, y_label_right=None, legend='auto', legend_loc="lower right",
+                 scatter_max=None, scatter_min=None):
         if lines is None:
             lines = []
         if scatter is None:
@@ -97,6 +102,8 @@ class Tile:
         self.grid = grid
         self.x_lim = x_lim
         self.y_lim = y_lim
+        self.scatter_max = scatter_max
+        self.scatter_min = scatter_min
         self.x_norm = x_norm
         self.y_norm = y_norm
         self.textbox = textbox
@@ -419,7 +426,7 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
 
                     # JBO-Logo
 
-                    image_bgr = plt.imread("JBO_Logo.png", format='png')
+                    image_bgr = plt.imread(run_path + "\\JBO_Logo.png", format='png')
 
                     if Tile.x_norm != 'lin':
                         axis.set_xscale(Tile.x_norm)
@@ -455,6 +462,12 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
 
                             cmap = matplotlib.colormaps[scatter.cmap]
                             cmap.set_bad(color="grey")
+
+                            if Tile.scatter_max is not None:
+                                c_max = Tile.scatter_max
+
+                            if Tile.scatter_min is not None:
+                                c_min = Tile.scatter_min
 
                             ax_yy.scatter(scatter.x,
                                           scatter.y,
@@ -503,6 +516,13 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
 
                                     cbar.set_label(scatter.cbar_label, fontsize=cbar_label_fontsize)
 
+                                if scatter.cbar_extraticks:
+                                    for tick, label in scatter.cbar_extraticks:
+                                        # Add the new extra tick manually
+                                        new_ticks = cbar.get_ticks().tolist() + [tick]  # Add a new tick at 0.5
+                                        new_labels = [str(tick) if tick != 0.5 else label for tick in new_ticks]  # Custom label for the new tick
+                                        cbar.set_ticks(new_ticks)  # Update the ticks
+                                        cbar.set_ticklabels(new_labels)  # Update the tick labelsorizontal line (y-axis)
                         else:
                             axis.scatter(scatter.x,
                                           scatter.y,
@@ -675,7 +695,7 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
                     axis = fig.add_subplot(grid[0], grid[1], i_page+1, polar=True)
 
                     # JBO-Logo
-                    image_bgr = plt.imread("JBO_Logo.png", format='png')
+                    image_bgr = plt.imread(run_path + "\\JBO_Logo.png", format='png')
 
                     axin = axis.inset_axes([0.2, 0.6, 0.6, 0.4], zorder=-1)
                     axin.imshow(image_bgr, zorder=-1)
@@ -763,7 +783,7 @@ def plot_rosebar(radial_data, r_bins, angles, r_max=None, plot=None, figsize=Non
         fig, axis = plt.subplots(1, 1, figsize=figsize, polar=True)
         # JBO-Logo
 
-        image_bgr = plt.imread("JBO_Logo.png", format='png')
+        image_bgr = plt.imread(run_path + "\\JBO_Logo.png", format='png')
 
         axin = axis.inset_axes([0.2, 0.6, 0.6, 0.4], zorder=-1)
         axin.imshow(image_bgr, zorder=-1)
