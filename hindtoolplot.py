@@ -257,6 +257,7 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
         }
         matplotlib.rcParams.update(pgf_with_pdflatex)
     else:
+        matplotlib.use('module://backend_interagg')
         rcParams['text.usetex'] = True
 
     FIG = []
@@ -776,6 +777,7 @@ def plot_rosebar(radial_data, r_bins, angles, r_max=None, plot=None, figsize=Non
         }
         matplotlib.rcParams.update(pgf_with_pdflatex)
     else:
+        matplotlib.use('module://backend_interagg')
         rcParams['text.usetex'] = True
 
     if plot is None:
@@ -1125,6 +1127,7 @@ def plot_dataframe(data, header=True, plot=None, corner1=(0.1, 0.9), corner2=(0.
         }
         matplotlib.rcParams.update(pgf_with_pdflatex)
     else:
+        matplotlib.use('module://backend_interagg')
         rcParams['text.usetex'] = True
 
 
