@@ -614,3 +614,64 @@ def initilize_document(DocumentMeta, Revisions, bib_paths, acronyms_path, save_p
     main_tex, last_idx = include_include(main_tex, chapter)
 
     return main_tex, titlepage_tex, introduction_tex
+
+
+def load_templates(path_templates):
+    """
+    Load LaTeX templates from a specified directory.
+
+    This function scans the given directory for text files (`.txt`) and reads their content.
+    Each file's content is stored in a dictionary, where the key is the filename (excluding the `.txt` extension),
+    and the value is the content of the file.
+
+    Parameters:
+        path_templates (str): The path to the directory containing template `.txt` files.
+
+    Returns:
+        dict: A dictionary where keys are template names (derived from filenames without the `.txt` suffix),
+              and values are the corresponding file contents as strings.
+    """
+
+    # load latex Templates
+    template_files = [f for f in os.listdir(path_templates) if f.endswith('.txt')]
+    template_paths = [os.path.join(path_templates, f) for f in os.listdir(path_templates) if f.endswith('.txt')]
+    templates_names = [name.removesuffix('.txt') for name in template_files]
+    TEMPLATES = {}
+    for path, name in zip(template_paths, templates_names):
+        with open(path, 'r', encoding='utf-8') as file:
+            TEMPLATES[name] = file.read()
+
+    return TEMPLATES
+
+
+def load_figures(path_figs):
+    """
+    Load metadata of PNG images from a specified directory into a pandas DataFrame.
+
+    This function scans the given directory for `.png` files and organizes their information
+    into a DataFrame. Each row in the DataFrame represents an image, with columns for the
+    filename, file path, caption, and width.
+
+    Parameters:
+        path_figs (str): The path to the directory containing `.png` image files.
+
+    Returns:
+        pd.DataFrame: A DataFrame with the following columns:
+            - `filename`: The name of the image file.
+            - `path`: The full file path to the image.
+            - `caption`: A caption derived from the filename (underscores replaced with hyphens).
+            - `width`: A default width value (set to 1 for all images).
+        The DataFrame index corresponds to the filenames (excluding the `.png` extension).
+    """
+
+    png_files = [f for f in os.listdir(path_figs) if f.endswith('.png')]
+    png_paths = [os.path.join(path_figs, f) for f in os.listdir(path_figs) if f.endswith('.png')]
+    png_names = [name.removesuffix('.png') for name in png_files]
+    FIGURES = pd.DataFrame(columns=["filename", "path", "caption", "width"])
+    FIGURES["filename"] = png_files
+    FIGURES["width"] = 1
+    FIGURES["path"] = png_paths
+    FIGURES["caption"] = [name.replace('_', '-') for name in png_names]
+    FIGURES.index = png_names
+
+    return FIGURES
