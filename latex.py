@@ -262,13 +262,15 @@ def include_Fig(string, FigInfo):
                        "\\label{fig:?FIGURE_NAME} \n"
                        "\\end{figure}")
 
+
+
     if FigInfo is not None:
         figure_latex = gl.alias(figure_template,
                                 {"1": "?FIGURE_PATH",
                                  "2": "?CAPTION",
                                  "3": "?FIGURE_NAME",
                                  "4": "?FIGURE_WIDTH"},
-                                {"1": FigInfo["path"],
+                                {"1": FigInfo["path"].replace("\\", "/"),
                                  "2": FigInfo["caption"],
                                  "3": FigInfo.name,
                                  "4": f"{FigInfo['width']}"})
@@ -327,7 +329,7 @@ def include_MultiFig(string, FigInfo):
                                  "2": "?CAPTION",
                                  "3": "?FIGURE_NAME",
                                  "4": "?FIGURE_WIDTH"},
-                                {"1": Fig["path"],
+                                {"1": Fig["path"].replace("\\", "/"),
                                  "2": Fig["caption"],
                                  "3": Fig.name,
                                  "4": f"{Fig['width']}"})
@@ -387,8 +389,8 @@ def include_MultiTab(string, FigInfo):
                                  "2": "?CAPTION",
                                  "3": "?FIGURE_NAME",
                                  "4": "?FIGURE_WIDTH"},
-                                {"1": Fig["path"],
-                                 "2": Fig["caption"],
+                                {"1": Fig["path"].replace("\\", "/"),
+                                 "2":  Fig["caption"],
                                  "3": Fig.name,
                                  "4": f"{Fig['width']}"})
 
@@ -449,7 +451,7 @@ def include_TableFig(string, FigInfo):
                                     {"1": "?FIGURE_PATH",
                                      "3": "?FIGURE_NAME",
                                      "4": "?FIGURE_WIDTH"},
-                                    {"1": FigInfo["path"],
+                                    {"1": FigInfo["path"].replace("\\", "/"),
                                      "3": FigInfo.name,
                                      "4": f"{FigInfo['width']}"})
         else:
@@ -459,7 +461,7 @@ def include_TableFig(string, FigInfo):
                                      "2": "?CAPTION",
                                      "3": "?FIGURE_NAME",
                                      "4": "?FIGURE_WIDTH"},
-                                    {"1": FigInfo["path"],
+                                    {"1": FigInfo["path"].replace("\\", "/"),
                                      "2": FigInfo["caption"],
                                      "3": FigInfo.name,
                                      "4": f"{FigInfo['width']}"})
@@ -563,8 +565,8 @@ def initilize_document(DocumentMeta, Revisions, bib_paths, acronyms_path, save_p
         pic = "map"
         FIGURES.loc[pic, "filename"] = f"{pic}.png"
         FIGURES.loc[pic, "path"] = map[0]
-        FIGURES.loc[pic, "caption"] = map[0]
-        FIGURES.loc[pic, "width"] = 0.4
+        FIGURES.loc[pic, "caption"] = map[1]
+        FIGURES.loc[pic, "width"] = 1
 
     FIGURES.loc[:, "path"] = [string.replace("\\", "/") for string in FIGURES.loc[:, "path"]]
 

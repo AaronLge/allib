@@ -453,7 +453,7 @@ def JONSWAP(f: list, T_p: float, H_s: float, gamma_mode='torset') -> list:
     S_over = 0.3125 * H_s ** 2 * T_p * (f / f_p) ** -5 * np.exp(-1.25 * (f / f_p) ** -4) * (
             1 - 0.287 * np.log(gamma)) * gamma ** np.exp(-0.5 * ((f - f_p) / (sigma_over * f_p)) ** 2)
 
-    S = np.concatenate((S_under[f < f_p], S_over[f > f_p]))
+    S = np.concatenate((S_under[f <= f_p], S_over[f > f_p]))
 
     return S
 
@@ -2007,7 +2007,4 @@ def fill_nans(data):
             arr[start + 1:end] = arr[start]
 
     return arr.tolist()
-
-
-
 

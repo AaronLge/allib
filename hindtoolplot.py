@@ -873,7 +873,7 @@ def plot_rosebar(radial_data, r_bins, angles, r_max=None, plot=None, figsize=Non
     return fig, axis
 
 
-def table(data,  **kwargs):
+def table(data, figsize=None, **kwargs):
     """The table function creates a table with the JBO-Design
 
     Parameters:
@@ -893,6 +893,10 @@ def table(data,  **kwargs):
     return:
     Figure
     """
+    if figsize is None:
+        figsize = [8.268, 11.693]
+
+    figsize_manipulated = figsize.copy()
 
     col_labels = kwargs.get('collabels', None)
     row_labels = kwargs.get('rowlabels', None)
@@ -907,7 +911,6 @@ def table(data,  **kwargs):
     null = kwargs.get('null', '0')
     heatmap = kwargs.get('heatmap', False)
     cmap_heatmap = kwargs.get('cmap_heatmap', 'Blues')
-    figsize = kwargs.get('figsize', [8.268, 11.693])
     datatype = kwargs.get('datatype', None)
     cell_height = kwargs.get('cell_height', None)
     cell_width = kwargs.get('cell_width', None)
@@ -927,8 +930,6 @@ def table(data,  **kwargs):
         matplotlib.rcParams.update(pgf_with_pdflatex)
     else:
         rcParams['text.usetex'] = True
-
-
 
     try:
         max_data = np.max(data)
@@ -985,30 +986,30 @@ def table(data,  **kwargs):
 
     if cell_height is not None:
         if type(cell_height) is float or type(cell_height) is int:
-            figsize[1] = np.size(CELLS, axis=0) * cell_height*0.39370079
+            figsize_manipulated[1] = np.size(CELLS, axis=0) * cell_height*0.39370079
             cell_height_res = [cell_height for _ in CELLS]
             cell_height_res = [cell / sum(cell_height_res) for cell in cell_height_res]
 
         if type(cell_height) is list:
-            figsize[1] = sum(cell_height)*0.39370079
+            figsize_manipulated[1] = sum(cell_height)*0.39370079
             cell_height_res = cell_height
             cell_height_res = [cell / sum(cell_height_res) for cell in cell_height_res]
 
     if cell_width is not None:
         if type(cell_width) is float or type(cell_width) is int:
-            figsize[0] = np.size(CELLS, axis=1) * cell_width*0.39370079
+            figsize_manipulated[0] = np.size(CELLS, axis=1) * cell_width*0.39370079
 
             cell_width_res = [cell_height for _ in CELLS]
             cell_width_res = [cell/sum(cell_width_res) for cell in cell_width_res]
 
         if type(cell_width) is list:
             if cell_width_unit == 'cm':
-                figsize[0] = sum(cell_width)*0.39370079
+                figsize_manipulated[0] = sum(cell_width)*0.39370079
             cell_width_res = cell_width
             cell_width_res = [cell/sum(cell_width) for cell in cell_width]
 
     # A4 size in inches (landscape)
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize_manipulated)
     #ax.set_axis_off()
 
     table = ax.table(cellText=CELLS, bbox=[0, 0, 1, 1])
