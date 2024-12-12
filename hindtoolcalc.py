@@ -2045,7 +2045,7 @@ def update_DEL_db(db_path, Hs, Tp, gamma, proj_path=None, input_path=None, exe_p
                  "Hs": Hs.name,
                  "Tp": Tp.name,
                  "gamma": gamma.name,
-                 "foundation_superelement":Var_lua["foundation_superelement"],
+                 "foundation_superelement": Var_lua["foundation_superelement"],
                  "found_stiff_trans": Var_lua["found_stiff_trans"],
                  "found_stiff_rotat": Var_lua["found_stiff_rotat"],
                  "found_stiff_coupl": Var_lua["found_stiff_coupl"],

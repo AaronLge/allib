@@ -1496,12 +1496,12 @@ def x_max_sampeling(x, time_window_offeset, n_samp=None):
 
     for i in range(len(years_start) - 1):
         x_section = x.loc[years_start[i]:years_start[i + 1]]
+        if len(x_section) != 0:
+            x_max_temp = max(x_section)
+            indx_x_max = np.array(x_section).argmax()
+            time_x_max = x_section.index[indx_x_max]
 
-        x_max_temp = max(x_section)
-        indx_x_max = np.array(x_section).argmax()
-        time_x_max = x_section.index[indx_x_max]
-
-        x_max.at[time_x_max] = x_max_temp
+            x_max.at[time_x_max] = x_max_temp
 
     return x_max, years_newyear, years_start
 
