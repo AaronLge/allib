@@ -908,6 +908,10 @@ def cross_correlation(VM_grid, HS_values, HS_grid, TP_values, fill_range=None):
         nearest_idx = np.abs(HS_grid - HS_unique[0]).argmin()  # Find the nearest x to xp[0]
         Vm_res[nearest_idx] = VM_unique[0]
 
+    if all(np.isnan(Vm_res)):
+        nearest_idx = np.abs(HS_grid - HS_unique[0]).argmin()
+        Vm_res[nearest_idx] = VM_unique[nearest_idx]
+
     TP_res[np.where(~np.isnan(Vm_res))[0]] = TP_values[np.where(~np.isnan(Vm_res))[0]]
 
     # fill not interpolated values to data limits
@@ -1568,6 +1572,7 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
 
         else:
             vm_grid = None
+
 
         Vm_res, TP_res = cross_correlation(VM_grid.values, HS_values, HS_grid.values, TP_values, fill_range=vm_grid)
 
