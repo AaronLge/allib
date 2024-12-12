@@ -130,7 +130,7 @@ class Calculation:
 
         return df
 
-    def add_filter(self, colnames=None, mode='range', ranges=None):
+    def add_filter(self, colnames=None, mode='range', ranges=None, update_basedata=True):
         """filters data specified in "basedata" propterty, has to be initilized by using "initilize_from_db". creats "filt" dictionary, that contains:
          indizes_in: datetime index object, with all indizies still in the filtered list
          indizes_out: datetime index object, with all indizies excluded by filtering
@@ -141,7 +141,7 @@ class Calculation:
             colnames (list of str, optional): A list of column names to filter by.
             mode (str, optional): The mode of filtering ('range' or 'nans'). Default is 'range'.
             ranges (list of lists, optional): The ranges of values to filter by, if mode is 'range'.
-
+            update_basedata (bool, optional): Edits basedata values (N_row, timespan) when filter is applied, default is True
         Returns:
             dict: The filter information, including indices included and excluded by the filter.
         """
@@ -183,6 +183,10 @@ class Calculation:
         filt["mode"] = mode
         filt["ranges"] = ranges
         filt["colnames"] = colnames
+
+        if update_basedata:
+            self.basedata["db_timeframe"] = [df_filt.index[0], df_filt.index[-1]]
+            self.basedata["N_rows"] = len(df_filt)
 
         self.filters.append(filt)
         return filt
@@ -1718,6 +1722,9 @@ def calc_tables(vmhs, vm_grid, vm_data):
 
         # vm_zone_VMHS = [Vm_table_center[spanned_isdata_table].iloc[0] -
         #                vm_step / 2, Vm_table_center[spanned_isdata_table].iloc[-1] + vm_step / 2]
+
+        #set <0 to nan
+        HS[HS<0] = float('nan')
 
         result = pd.DataFrame()
 
