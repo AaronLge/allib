@@ -162,36 +162,6 @@ def compile_lualatex(tex_file, pdf_path=None, miktex_lualatex_path='C:/temp/MikT
     - A separate thread sends newline characters to the LuaLaTeX process periodically, which may be necessary to handle specific interactive prompts.
 
     """
-    def press_return_periodically(process):
-        """
-        Sends a newline character (`\\n`) to the input of a subprocess periodically.
-
-        Parameters:
-        -----------
-        process : subprocess.Popen
-            The process to which the newline character will be sent.
-        """
-        while process.poll() is None:  # Check if the process is active
-            process.stdin.write('\n')
-            process.stdin.flush()
-            time.sleep(1)
-
-    def run_subprocess(command, cwd):
-        """
-        Runs a subprocess command and handles periodic interaction with the process.
-
-        Parameters:
-        -----------
-        command : list of str
-            The command to execute as a list of arguments.
-        cwd : str
-            The working directory where the command should be executed.
-        """
-        with subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.PIPE, text=True, cwd=cwd) as process:
-            thread = Thread(target=press_return_periodically, args=(process,))
-            thread.start()
-            process.wait()  # Wait for the process to complete
-            thread.join()  # Ensure the thread finishes
 
     run_path = os.path.dirname(os.path.realpath(__file__))
     txt_path = os.path.dirname(tex_file)
@@ -201,21 +171,21 @@ def compile_lualatex(tex_file, pdf_path=None, miktex_lualatex_path='C:/temp/MikT
 
     # Compile the .tex file using LuaLaTeX
     try:
-        run_subprocess([miktex_lualatex_path, tex_file, '-output-directory', txt_path], cwd=txt_path)
+        gl.run_subprocess([miktex_lualatex_path, tex_file, '-output-directory', txt_path], cwd=txt_path, refresh_time=1)
     except Exception as e:
         print(f"LuaLaTeX compilation failed: {e}")
 
     # Run the bibliography tool (Biber)
     for i in range(1):
         try:
-            run_subprocess([biber_path, main_name, '-output-directory', txt_path], cwd=txt_path)
+            gl.run_subprocess([biber_path, main_name, '-output-directory', txt_path], cwd=txt_path, refresh_time=1)
         except Exception as e:
             print(f"Biber execution failed: {e}")
 
     # Run LuaLaTeX two more times to update references
     for i in range(3):
         try:
-            run_subprocess([miktex_lualatex_path, tex_file, '-output-directory', txt_path], cwd=txt_path)
+            gl.run_subprocess([miktex_lualatex_path, tex_file, '-output-directory', txt_path], cwd=txt_path, refresh_time=1)
         except Exception as e:
             print(f"LuaLaTeX pass {i + 2} failed: {e}")
 

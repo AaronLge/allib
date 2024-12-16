@@ -718,6 +718,42 @@ def Weibull_fit(Data_Sec, Input):
 
 
 def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
+    """
+    Calculates vm_specific and added damage Equivalent Loads (DELs) based on input time series data and metadata.
+
+    Parameters
+    ----------
+    v_m : array-like
+        A sequence of velocities or other indexing variables for the resulting DataFrame.
+    H_s : array-like
+        Significant wave height data, with NaN values indicating missing data.
+    T_p : array-like
+        Peak period data corresponding to `H_s`, with NaN values for missing data.
+    gamma : float or None
+        Shape parameter for the wave spectrum. Defaults to 3.3 if not provided.
+    count : array-like
+        Number of occurrences or counts for each event in the input data.
+    proj_path : str
+        Path to the project directory containing necessary metadata files.
+    exe_path : str
+        Path to the executable required for processing data with `run_JBOOST`.
+
+    Returns
+    -------
+    Table : pandas.DataFrame
+        DataFrame with normalized DEL values for each velocity in `v_m` and wave spectrum data.
+        Includes a "count" column corresponding to the input `count`.
+    Added : pandas.DataFrame
+        DataFrame containing weighted and normalized DEL values for each column.
+
+    Notes
+    -----
+    - The function handles missing data (NaN values) in `H_s` and processes only valid entries.
+    - Uses the `run_JBOOST` function to compute raw DEL values and the `read_lua_values` function
+      to extract metadata like design life, reference cycles (N_ref), and the S-N slope.
+    - DEL normalization is performed using the metadata and provided count data.
+    - The resulting DELs are scaled and normalized according to the S-N curve slope and reference cycles.
+    """
     Table = pd.DataFrame(index=v_m)
     Added = pd.DataFrame()
 
@@ -728,7 +764,7 @@ def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
 
     proj_name = os.path.basename(proj_path)
 
-    DEL_raw = gl.calc_JBOOST(exe_path, proj_name, H_s[~isnan], T_p[~isnan], gamma)
+    DEL_raw = gl.run_JBOOST(exe_path, proj_name, H_s[~isnan], T_p[~isnan], gamma)
     Meta_data = gl.read_lua_values(proj_path, ["design_life", "N_ref", "SN_slope"])
 
     skal_time = (Meta_data["design_life"] * 365.25 * 24)
@@ -761,6 +797,40 @@ def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
 
 
 def DEL_points(DEL, v_m, v_m_edges, design_life, N_ref, SN_slope):
+    """
+    Compute Damage Equivalent Loads (DELs) binned by velocity and normalized using S-N curve parameters.
+
+    Parameters
+    ----------
+    DEL : pandas.DataFrame
+        Raw DEL values for each condition, with columns representing different DEL scenarios.
+    v_m : array-like
+        Velocity or other continuous variable used for binning.
+    v_m_edges : array-like
+        Edges of the velocity bins. Must be one element longer than the number of bins.
+    design_life : float
+        Design life in years, used to scale the DEL calculations.
+    N_ref : float
+        Reference number of cycles for the S-N curve.
+    SN_slope : float
+        Slope of the S-N curve, used for normalizing DEL values.
+
+    Returns
+    -------
+    Table : pandas.DataFrame
+        DataFrame containing binned and normalized DEL values for each scenario in `DEL`.
+        Includes a "count" column representing the number of data points in each bin.
+    Added : pandas.DataFrame
+        DataFrame containing total normalized DEL values across all bins for each scenario.
+
+    Notes
+    -----
+    - Bins the `DEL` values by `v_m` according to the provided `v_m_edges`.
+    - The `count` column in `Table` indicates the number of `v_m` entries in each bin.
+    - DEL values are normalized using the design life, S-N curve slope, and reference cycles.
+    - The midpoints of the velocity bins are used as the index for `Table`.
+
+    """
     Table = pd.DataFrame()
     Added = pd.DataFrame()
 
@@ -1573,7 +1643,6 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
         else:
             vm_grid = None
 
-
         Vm_res, TP_res = cross_correlation(VM_grid.values, HS_values, HS_grid.values, TP_values, fill_range=vm_grid)
 
         vmtp_curr_data['x'] = Vm_res
@@ -2135,7 +2204,7 @@ def update_DEL_db(db_path, Hs, Tp, gamma, proj_path=None, input_path=None, exe_p
             # write database data, which will not be calculated in db frame
 
             # wirte calculated data, which was not in database in db frame
-            DEL_temp = gl.calc_JBOOST(exe_path, proj_name, Hs.loc[in_df_not_in_db], Tp.loc[in_df_not_in_db], gamma.loc[in_df_not_in_db])
+            DEL_temp = gl.run_JBOOST(exe_path, proj_name, Hs.loc[in_df_not_in_db], Tp.loc[in_df_not_in_db], gamma.loc[in_df_not_in_db])
 
         if not time_to_add and nodes_to_add:
             print(f'   New nodes found in run ({new_nodes}), but no new timestep. Calculating the new nodes, this might take a long time')
@@ -2143,7 +2212,7 @@ def update_DEL_db(db_path, Hs, Tp, gamma, proj_path=None, input_path=None, exe_p
             gl.write_lua_variables(JBOOST_proj_path_new, {'res_Nodes': new_nodes})
 
             # write calculated dataframe where it is calculated in db frame
-            DEL_temp = gl.calc_JBOOST(exe_path, proj_name, Hs, Tp, gamma)
+            DEL_temp = gl.run_JBOOST(exe_path, proj_name, Hs, Tp, gamma)
 
         if time_to_add and nodes_to_add:
             print(f'   New nodes found in run ({new_nodes}).')
@@ -2151,11 +2220,11 @@ def update_DEL_db(db_path, Hs, Tp, gamma, proj_path=None, input_path=None, exe_p
 
             gl.write_lua_variables(JBOOST_proj_path_new, {'res_Nodes': new_nodes})
             # calculate all new nodes and timepoints in dataframe and write in db_frame
-            DEL_temp_01 = gl.calc_JBOOST(exe_path, proj_name, Hs.loc[in_df], Tp.loc[in_df], gamma.loc[in_df])
+            DEL_temp_01 = gl.run_JBOOST(exe_path, proj_name, Hs.loc[in_df], Tp.loc[in_df], gamma.loc[in_df])
 
             # calculate the new data for the other nodes
             gl.write_lua_variables(JBOOST_proj_path_new, {'res_Nodes': both_nodes})
-            DEL_temp_02 = gl.calc_JBOOST(exe_path, proj_name, Hs.loc[in_df_not_in_db], Tp.loc[in_df_not_in_db], gamma.loc[in_df])
+            DEL_temp_02 = gl.run_JBOOST(exe_path, proj_name, Hs.loc[in_df_not_in_db], Tp.loc[in_df_not_in_db], gamma.loc[in_df])
 
             DEL_temp = gl.merge_dataframes(DEL_temp_02, DEL_temp_01)
 
@@ -2177,7 +2246,7 @@ def update_DEL_db(db_path, Hs, Tp, gamma, proj_path=None, input_path=None, exe_p
 
     else:
         print(f"   crate new database table and calculate all {len(Hs)} datapoints for all nodes, this might take a long time")
-        DEL_save = gl.calc_JBOOST('./JBOOST/', proj_name, Hs, Tp, gamma)
+        DEL_save = gl.run_JBOOST('./JBOOST/', proj_name, Hs, Tp, gamma)
 
         write_db = True
         columnnames_data = list(DEL_save.columns)
