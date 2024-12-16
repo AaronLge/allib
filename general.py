@@ -15,6 +15,8 @@ from sklearn.preprocessing import PolynomialFeatures
 from matplotlib.backends.backend_pdf import PdfPages
 import decimal
 import e57
+import time
+from threading import Thread
 
 # %% db handling
 def export_df_from_sql(db_file, table_name, column_names=None, timeframe=None, indizes=None):
@@ -157,6 +159,54 @@ def add_dataframe_to_db(db_path, table_name, df):
     conn.close()
 
 
+# %% process handling
+def press_return_periodically(process, refresh_time):
+    """
+    Sends a newline character (`\n`) to the input of a subprocess periodically.
+
+    Parameters:
+    -----------
+    process : subprocess.Popen
+        The process to which the newline character will be sent.
+    refresh_time : float
+        The interval (in seconds) between sending newline characters.
+    """
+    while process.poll() is None:  # Check if the process is active
+        process.stdin.write('\n')
+        process.stdin.flush()
+        time.sleep(refresh_time)
+
+
+def run_subprocess(command, cwd, refresh_time=None, shell=False):
+    """
+    Runs a subprocess command and optionally handles periodic interaction with the process.
+
+    Parameters:
+    -----------
+    command : list of str
+        The command to execute as a list of arguments.
+    cwd : str
+        The working directory where the command should be executed.
+    refresh_time : float or None, optional
+        If None, no interaction occurs. Otherwise, specifies the interval (in seconds) to send newline characters.
+    """
+    with subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.PIPE,
+            text=True,
+            cwd=cwd,
+            shell=shell
+    ) as process:
+        if refresh_time is not None:
+            thread = Thread(target=press_return_periodically, args=(process, refresh_time))
+            thread.start()
+
+        process.wait()  # Wait for the process to complete
+
+        if refresh_time is not None:
+            thread.join()  # Ensure the thread finishes
 # %% sonstiges
 def model_regression(x: pd.core.series.Series, y: pd.core.series.Series,
                      **kwargs) -> skl.linear_model._base.LinearRegression:
@@ -1585,13 +1635,14 @@ def add_unique_row(df1, df2, exclude_columns=None):
 
 
 # Validation
-def calc_JBOOST(path_exe, proj_name, Hs, Tp, gamma):
+def run_JBOOST(path_exe, proj_name, Hs, Tp, gamma):
     # exporting JBOOST input Files of Database
     write_JBOOST_wave(Hs, Tp, gamma, path_exe + 'wave.lua')
 
     # Run JBOOST
-    subprocess.check_call(['JBOOST.exe', proj_name],
-                          cwd=path_exe, shell=True)
+    # subprocess.check_call(['JBOOST.exe', proj_name],
+    #                       cwd=path_exe, shell=True)
+    run_subprocess(['JBOOST.exe', proj_name], cwd=path_exe, refresh_time=100, shell=True)
 
     # import points of Database
     temp, debug = import_JBOOST(path_exe + 'Results_JBOOST_Text/JBOOST.out')
