@@ -616,22 +616,31 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
 
                     # Lims
                     axis.margins(0)
-                    if x_min is not None:
+                    if Tile.x_lim[0] is not None:
+                        x_min_set = Tile.x_lim[0]
+                    elif x_min is not None:
                         x_min_set = x_min
                     else:
                         x_min_set = axis.get_xlim()[0]
 
-                    if x_max is not None:
+                    if Tile.x_lim[1] is not None:
+                        x_max_set = Tile.x_lim[1]
+                    elif x_max is not None:
                         x_max_set = x_max
                     else:
                         x_max_set = axis.get_xlim()[1]
 
-                    if y_min is not None:
+                    if Tile.y_lim[0] is not None:
+                        y_min_set = Tile.y_lim[0]
+                    elif y_min is not None:
                         y_min_set = y_min
+
                     else:
                         y_min_set = axis.get_ylim()[0]
 
-                    if y_max is not None:
+                    if Tile.y_lim[1] is not None:
+                        y_max_set = Tile.y_lim[1]
+                    elif y_max is not None:
                         y_max_set = y_max
                     else:
                         y_max_set = axis.get_ylim()[1]
