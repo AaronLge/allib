@@ -226,8 +226,41 @@ class ErrorBar:
 # %% functions
 
 def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_title=10, fontsize_legend=6, fontsize_label=8, fontsize_ticks=8, grid=None, scatter_max='auto',
-               scatter_min='auto', use_pgf=False, max_margins=None, min_margins=None):
+               scatter_min='auto', use_pgf=False, max_margins=None, min_margins=None, fill_page=False):
+    """
+    Plots a tiled layout of graphical objects represented by the `Tiles` input.
 
+    The function supports Cartesian and polar plots, with customizable figure size,
+    font sizes, axis limits, and page layout. It adapts the visualization to either
+    fill pages completely or accommodate non-standard aspect ratios.
+
+    Args:
+        Tiles (list): A list of Tile or PolarTile objects defining the content of each subplot.
+        figsize (tuple, optional): Size of the figure in inches (width, height). Defaults to (8.268, 11.693).
+        global_max (list, optional): Global maximum limits for axes [x_max, y_max]. Defaults to ['auto', 'auto'].
+        global_min (list, optional): Global minimum limits for axes [x_min, y_min]. Defaults to ['auto', 'auto'].
+        fontsize_title (int, optional): Font size for plot titles. Defaults to 10.
+        fontsize_legend (int, optional): Font size for plot legends. Defaults to 6.
+        fontsize_label (int, optional): Font size for axis labels. Defaults to 8.
+        fontsize_ticks (int, optional): Font size for axis tick labels. Defaults to 8.
+        grid (list, optional): Grid layout for tiles as [rows, columns]. Defaults to [3, 2].
+        scatter_max (str or float, optional): Maximum value for scatter plot colormap. Use 'auto' to determine automatically. Defaults to 'auto'.
+        scatter_min (str or float, optional): Minimum value for scatter plot colormap. Use 'auto' to determine automatically. Defaults to 'auto'.
+        use_pgf (bool, optional): Whether to use PGF for LaTeX-based rendering. Defaults to False.
+        max_margins (list, optional): Extra margins to add beyond the global maximum limits [x_margin, y_margin]. Defaults to [None, None].
+        min_margins (list, optional): Extra margins to add beyond the global minimum limits [x_margin, y_margin]. Defaults to [None, None].
+        fill_page (bool, optional): Whether to fill the entire page with plots. Defaults to False.
+
+    Returns:
+        list: A list of Matplotlib figure objects for the generated pages.
+
+    Notes:
+        - The function determines axis limits (`x_min`, `x_max`, `y_min`, `y_max`) based on the content
+          of the `Tiles` input or uses the provided global limits.
+        - Supports both Cartesian and polar plots with advanced customization for scatter, line, bar, and error bar elements.
+        - The PGF backend uses LuaLaTeX for LaTeX rendering, while the default backend relies on the interagg module.
+
+    """
     if figsize is None:
         figsize = (8.268, 11.693)
 
@@ -405,7 +438,14 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
     # iteration pages
     for page, _ in enumerate(range(pages)):
 
-        fig, ax = plt.subplots(grid[0], grid[1], figsize=figsize)
+        if not fill_page and (page + 1) == pages:
+            N_tiles_last = N_exp - i
+            rows_required = np.ceil(N_tiles_last/grid[1])
+            tiles_page = int(rows_required * grid[1])
+            fig_skal = rows_required/grid[0]
+            fig, ax = plt.subplots(int(rows_required), grid[1], figsize=[figsize[0], figsize[1]*fig_skal])
+        else:
+            fig, ax = plt.subplots(grid[0], grid[1], figsize=figsize)
 
         if tiles_page != 1:
             ax_flat = ax.flatten()
@@ -582,7 +622,7 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
                                        color=line.color,
                                        label=line.label,
                                        alpha=line.alpha,
-                                          zorder=line.zorder)
+                                       zorder=line.zorder)
 
                     # ERRORBAR
                     for errorbar in Tile.errorbar:
@@ -609,22 +649,31 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
 
                     # Lims
                     axis.margins(0)
-                    if x_min is not None:
+                    if Tile.x_lim[0] is not None:
+                        x_min_set = Tile.x_lim[0]
+                    elif x_min is not None:
                         x_min_set = x_min
                     else:
                         x_min_set = axis.get_xlim()[0]
 
-                    if x_max is not None:
+                    if Tile.x_lim[1] is not None:
+                        x_max_set = Tile.x_lim[1]
+                    elif x_max is not None:
                         x_max_set = x_max
                     else:
                         x_max_set = axis.get_xlim()[1]
 
-                    if y_min is not None:
+                    if Tile.y_lim[0] is not None:
+                        y_min_set = Tile.y_lim[0]
+                    elif y_min is not None:
                         y_min_set = y_min
+
                     else:
                         y_min_set = axis.get_ylim()[0]
 
-                    if y_max is not None:
+                    if Tile.y_lim[1] is not None:
+                        y_max_set = Tile.y_lim[1]
+                    elif y_max is not None:
                         y_max_set = y_max
                     else:
                         y_max_set = axis.get_ylim()[1]
