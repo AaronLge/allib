@@ -1637,7 +1637,7 @@ def add_unique_row(df1, df2, exclude_columns=None):
 # Validation
 def run_JBOOST(path_exe, proj_name, Hs, Tp, gamma):
     # exporting JBOOST input Files of Database
-    write_JBOOST_wave(Hs, Tp, gamma, path_exe + 'wave.lua')
+    write_JBOOST_wave(Hs, Tp, gamma, path_exe + '\\wave.lua')
 
     # Run JBOOST
     # subprocess.check_call(['JBOOST.exe', proj_name],

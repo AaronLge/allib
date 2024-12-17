@@ -226,7 +226,7 @@ class ErrorBar:
 # %% functions
 
 def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_title=10, fontsize_legend=6, fontsize_label=8, fontsize_ticks=8, grid=None, scatter_max='auto',
-               scatter_min='auto', use_pgf=False, max_margins=None, min_margins=None):
+               scatter_min='auto', use_pgf=False, max_margins=None, min_margins=None, fill_page=False):
 
     if figsize is None:
         figsize = (8.268, 11.693)
@@ -405,7 +405,14 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
     # iteration pages
     for page, _ in enumerate(range(pages)):
 
-        fig, ax = plt.subplots(grid[0], grid[1], figsize=figsize)
+        if not fill_page and (page + 1) == pages:
+            N_tiles_last = N_exp - i
+            rows_required = np.ceil(N_tiles_last/grid[1])
+            tiles_page = int(rows_required * grid[1])
+            fig_skal = rows_required/grid[0]
+            fig, ax = plt.subplots(int(rows_required), grid[1], figsize=[figsize[0], figsize[1]*fig_skal])
+        else:
+            fig, ax = plt.subplots(grid[0], grid[1], figsize=figsize)
 
         if tiles_page != 1:
             ax_flat = ax.flatten()

@@ -151,10 +151,10 @@ class Calculation:
         if colnames is None:
             colnames = self.basedata["colnames_ini"]
         if colnames == 'all':
-            df_filt = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"])
+            df_filt = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"], timeframe=self.basedata["db_timeframe"])
             colnames = list(df_filt.columns)
         else:
-            df_filt = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"], column_names=colnames)
+            df_filt = gl.export_df_from_sql(self.basedata["dbname"], self.basedata["tablename"], column_names=colnames, timeframe=self.basedata["db_timeframe"])
 
         if self.filters is None:
             self.filters = []
@@ -1370,7 +1370,6 @@ def extreme_contures_blackbox(Hs, Tp, T_return):
 # %% macro functions
 def calc_VMHS(Vm, Hs, angle, angle_grid,
               N_grid=100,
-              weight_y=False,
               deg_reg=3,
               model_reg='poly',
               cut_reg=0,
@@ -1380,7 +1379,8 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
               bin_min=0,
               average_correction=1.0,
               avrg_method='mean',
-              make_monotone=False):
+              make_monotone=False,
+              N_segment_min=0):
     """Returns a list of VMHS segment objects for all segments in angle_grid.
     If angle_grid is None, omnidirectional is returned.
 
@@ -1450,38 +1450,36 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
 
         for angle_segment in angle_grid:
             # Make copies of the mutable parameters to avoid overwriting
-
-
             df = pd.concat([Vm, Hs, angle], axis=1)
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
+            if len(df_filt) > N_segment_min:
+                VMHS_DATA, Coeffs = condensation(df_filt[Vm.name], df_filt[Hs.name], grid,
+                                         deg_reg=deg_reg,
+                                         reg_model=model_reg,
+                                         cut_reg=cut_reg,
+                                         reg_weighting=weighting_reg,
+                                         zone_reg=zone_reg.copy(),
+                                         zone_line=zone_line.copy(),
+                                         bin_min=bin_min,
+                                         average_correction=average_correction,
+                                         avrg_method=avrg_method,
+                                         make_monotone=make_monotone)
 
-            VMHS_DATA, Coeffs = condensation(df_filt[Vm.name], df_filt[Hs.name], grid,
-                                     deg_reg=deg_reg,
-                                     reg_model=model_reg,
-                                     cut_reg=cut_reg,
-                                     reg_weighting=weighting_reg,
-                                     zone_reg=zone_reg.copy(),
-                                     zone_line=zone_line.copy(),
-                                     bin_min=bin_min,
-                                     average_correction=average_correction,
-                                     avrg_method=avrg_method,
-                                     make_monotone=make_monotone)
+                temp = Segment(num,
+                               angles=[angle_segment[0],
+                                       angle_segment[1]],
+                               indizes=list(df_filt.index),
+                               result={'data': VMHS_DATA, 'coeffs': Coeffs},
+                               colnames={'x': Vm.name, 'y': Hs.name},
+                               angle_name=angle.name)
 
-            temp = Segment(num,
-                           angles=[angle_segment[0],
-                                   angle_segment[1]],
-                           indizes=list(df_filt.index),
-                           result={'data': VMHS_DATA, 'coeffs': Coeffs},
-                           colnames={'x': Vm.name, 'y': Hs.name},
-                           angle_name=angle.name)
-
-            Data_Out.append(temp)
+                Data_Out.append(temp)
             num = num + 1
 
     return Data_Out
 
 
-def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
+def calc_HSTP(Hs, Tp, angle, angle_grid, N_segment_min=0, **kwargs):
     """retruns list of HSTP segment objects for all segments in angle_grid, if angle_grid is None, omnidirectional is returned
 
     Arguments:
@@ -1563,37 +1561,37 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, **kwargs):
         for num, angle_segment in enumerate(angle_grid):
 
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
+            if len(df_filt) > N_segment_min:
+                Table_cond, Coeffs = condensation(df_filt[Hs.name], df_filt[Tp.name], grid,
+                                          deg_reg=deg_reg,
+                                          reg_model=model_reg,
+                                          cut_reg=cut_reg,
+                                          reg_weighting=weighting_reg,
+                                          zone_reg=zone_reg.copy(),
+                                          zone_line=zone_line.copy(),
+                                          bin_min=bin_min,
+                                          perc=perc,
+                                          avrg_method=avrg_method,
+                                          make_monotone=make_monotone
+                                          )
 
-            Table_cond, Coeffs = condensation(df_filt[Hs.name], df_filt[Tp.name], grid,
-                                      deg_reg=deg_reg,
-                                      reg_model=model_reg,
-                                      cut_reg=cut_reg,
-                                      reg_weighting=weighting_reg,
-                                      zone_reg=zone_reg.copy(),
-                                      zone_line=zone_line.copy(),
-                                      bin_min=bin_min,
-                                      perc=perc,
-                                      avrg_method=avrg_method,
-                                      make_monotone=make_monotone
-                                      )
+                if quantile:
 
-            if quantile:
+                    if (len(perc) > 1) & (quant_up is not None) & (quant_low is not None):
+                        # todo: fehlernachricht
+                        key_low = f'{perc[0]} percentile plot'
+                        key_up = f'{perc[-1]} percentile plot'
 
-                if (len(perc) > 1) & (quant_up is not None) & (quant_low is not None):
-                    # todo: fehlernachricht
-                    key_low = f'{perc[0]} percentile plot'
-                    key_up = f'{perc[-1]} percentile plot'
+                        Table_cond["quantile"] = quantiles(Table_cond[key_low], Table_cond["mean result plot"], Table_cond[key_up], quant_low, quant_up)
 
-                    Table_cond["quantile"] = quantiles(Table_cond[key_low], Table_cond["mean result plot"], Table_cond[key_up], quant_low, quant_up)
+                temp = Segment(num=num,
+                               angles=[angle_segment[0], angle_segment[1]],
+                               result={'data': Table_cond, 'coeffs': Coeffs},
+                               indizes=list(df_filt.index),
+                               angle_name=angle.name,
+                               colnames={'x': Hs.name, 'y': Tp.name})
 
-            temp = Segment(num=num,
-                           angles=[angle_segment[0], angle_segment[1]],
-                           result={'data': Table_cond, 'coeffs': Coeffs},
-                           indizes=list(df_filt.index),
-                           angle_name=angle.name,
-                           colnames={'x': Hs.name, 'y': Tp.name})
-
-            Data_Out.append(temp)
+                Data_Out.append(temp)
 
     return Data_Out
 
@@ -1675,7 +1673,7 @@ def calc_Roseplot(angle, magnitude, angle_segments):
     return counts, r_edges
 
 
-def calc_RWI(Hs, Tp, angle, angle_grid, f_0, gamma_mode='default'):
+def calc_RWI(Hs, Tp, angle, angle_grid, f_0, gamma_mode='default',N_segment_min=0):
     """retruns list of RWI segment objects for all segments in angle_grid, if angle_grid is None, omnidirectional is returned
 
     Arguments:
@@ -1708,25 +1706,25 @@ def calc_RWI(Hs, Tp, angle, angle_grid, f_0, gamma_mode='default'):
         TP_max = Tp[RWI_list == RWI_max]
 
     else:
+            df = pd.concat([Hs, Tp, angle], axis=1)
 
-        df = pd.concat([Hs, Tp, angle], axis=1)
+            for num, angle_segment in enumerate(angle_grid):
 
-        for num, angle_segment in enumerate(angle_grid):
+                df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
+                if len(df_filt) > N_segment_min:
 
-            df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
+                    RWI_list = RWI(df_filt[Hs.name], df_filt[Tp.name], f_0, gamma_mode=gamma_mode)
 
-            RWI_list = RWI(df_filt[Hs.name], df_filt[Tp.name], f_0, gamma_mode=gamma_mode)
+                    RWI_df = pd.DataFrame(RWI_list, index=df_filt[Hs.name].index)
 
-            RWI_df = pd.DataFrame(RWI_list, index=df_filt[Hs.name].index)
+                    temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], result=RWI_df, colnames={'x': Hs.name, 'y': Tp.name}, angle_name=angle.name,
+                                   indizes=list(df_filt[Hs.name].index))
+                    Data_Out.append(temp)
 
-            temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], result=RWI_df, colnames={'x': Hs.name, 'y': Tp.name}, angle_name=angle.name,
-                           indizes=list(df_filt[Hs.name].index))
-            Data_Out.append(temp)
-
-            if max(RWI_list) > RWI_max:
-                RWI_max = max(RWI_list)
-                HS_max = df_filt[Hs.name][RWI_list == RWI_max]
-                TP_max = df_filt[Tp.name][RWI_list == RWI_max]
+                    if max(RWI_list) > RWI_max:
+                        RWI_max = max(RWI_list)
+                        HS_max = df_filt[Hs.name][RWI_list == RWI_max]
+                        TP_max = df_filt[Tp.name][RWI_list == RWI_max]
 
     return Data_Out, {'RWI_max': RWI_max, 'HS_max': HS_max, 'TP_max': TP_max}
 
@@ -1880,7 +1878,7 @@ def calc_tables(vmhs, vm_grid, vm_data):
     return VMHS_OUT
 
 
-def calc_WaveBreak_Steep(Hs, Tp, angle, angle_grid, steep_crit, d):
+def calc_WaveBreak_Steep(Hs, Tp, angle, angle_grid, steep_crit, d, N_segment_min=0):
     """retruns list of WaveBreakSteep segment objects for all segments in angle_grid, if angle_grid is None, omnidirectional is returned
 
     Arguments:
@@ -1913,18 +1911,20 @@ def calc_WaveBreak_Steep(Hs, Tp, angle, angle_grid, steep_crit, d):
         df = pd.concat([Hs, Tp, angle], axis=1)
 
         for num, angle_segment in enumerate(angle_grid):
+
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
+            if len(df_filt) > N_segment_min:
 
-            break_steep_bool_list, lamda_list, steepness = WaveBreak_steep(df_filt[Hs.name], df_filt[Tp.name], d, steep_crit)
-            break_steep_bool = pd.Series(break_steep_bool_list, name='bool_break')
-            lamda = pd.Series(lamda_list, name='lamda')
-            steepness = pd.Series(steepness, name='steepness')
+                break_steep_bool_list, lamda_list, steepness = WaveBreak_steep(df_filt[Hs.name], df_filt[Tp.name], d, steep_crit)
+                break_steep_bool = pd.Series(break_steep_bool_list, name='bool_break')
+                lamda = pd.Series(lamda_list, name='lamda')
+                steepness = pd.Series(steepness, name='steepness')
 
-            result = pd.concat([break_steep_bool, lamda, steepness], axis=1)
+                result = pd.concat([break_steep_bool, lamda, steepness], axis=1)
 
-            temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], result=result, colnames={'x': Hs.name, 'y': Tp.name}, angle_name=angle.name,
-                           indizes=list(df_filt.index))
-            Data_Out.append(temp)
+                temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], result=result, colnames={'x': Hs.name, 'y': Tp.name}, angle_name=angle.name,
+                               indizes=list(df_filt.index))
+                Data_Out.append(temp)
 
     return Data_Out
 
@@ -2005,7 +2005,7 @@ def calc_angle_deviation_tables(angle_orig, angle_comp, v_m, angle_grid, **kwarg
 
 
 def calc_ExtemeValues(x, angles, angle_grid, T_return_single=None, conf_inter_mode=None, conf_inter_algorithm=None, N_itter=None, freq_samp=None, perc_up=None, perc_down=None,
-                      time_window_offset=None):
+                      time_window_offset=None, N_segment_min=0):
     Data_Out = []
 
     if angle_grid is None:
@@ -2026,18 +2026,21 @@ def calc_ExtemeValues(x, angles, angle_grid, T_return_single=None, conf_inter_mo
         df = pd.concat([x, angles], axis=1)
         for num, angle_segment in enumerate(angle_grid):
             df_filt = gl.filter_dataframe(df, angles.name, angle_segment[0], angle_segment[1])
-            result = ExtremeValues(df_filt[x.name],
-                                   intervall_mode=conf_inter_mode,
-                                   intervall_algorithm=conf_inter_algorithm,
-                                   T_Return_single=T_return_single,
-                                   time_window_offset=time_window_offset,
-                                   perc_up=perc_up,
-                                   perc_down=perc_down,
-                                   freq_samp=freq_samp,
-                                   N_itter=N_itter)
 
-            temp = Segment(0, angles=angle_segment, result=result, colnames={'x': x.name, 'angle': angles.name}, angle_name=angles.name, indizes=list(df_filt.index))
-            Data_Out.append(temp)
+            if len(df_filt) > N_segment_min:
+
+                result = ExtremeValues(df_filt[x.name],
+                                       intervall_mode=conf_inter_mode,
+                                       intervall_algorithm=conf_inter_algorithm,
+                                       T_Return_single=T_return_single,
+                                       time_window_offset=time_window_offset,
+                                       perc_up=perc_up,
+                                       perc_down=perc_down,
+                                       freq_samp=freq_samp,
+                                       N_itter=N_itter)
+
+                temp = Segment(0, angles=angle_segment, result=result, colnames={'x': x.name, 'angle': angles.name}, angle_name=angles.name, indizes=list(df_filt.index))
+                Data_Out.append(temp)
     return Data_Out
 
 
@@ -2296,7 +2299,7 @@ def calc_Validation(df_DEL, Vm, angle, vmhs_table, vmtp_table, proj_path, input_
     gl.write_lua_variables(JBOOST_proj_path_new, {'res_Nodes': nodes_db})
 
     Meta_data = gl.read_lua_values(JBOOST_proj_path_new, ["design_life", "N_ref", "SN_slope"])
-    exe_path = os.path.abspath(exe_path)
+
     num = 0
     for vmhs_curr, vmtp_curr in zip(vmhs_table, vmtp_table):
 
@@ -2378,7 +2381,7 @@ def calc_histogram(x, angle, angle_grid):
     return Data_Out
 
 
-def calc_weibull(x, angle, angle_grid):
+def calc_weibull(x, angle, angle_grid, N_segment_min=0):
     Data_Out = []
 
     if angle_grid is None:
@@ -2406,18 +2409,19 @@ def calc_weibull(x, angle, angle_grid):
         for angle_segment in angle_grid:
             df = pd.concat([x, angle], axis=1)
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
+            if len(df_filt) > N_segment_min:
 
-            bin_size, center, prob, weibull, weibull_params = weibull_fit(df_filt[x.name])
-            histo_data = {"bin_size": bin_size,
-                          "center": center,
-                          "prob": prob,
-                          "weibull": weibull,
-                          "weibull_params": weibull_params
-                          }
+                bin_size, center, prob, weibull, weibull_params = weibull_fit(df_filt[x.name])
+                histo_data = {"bin_size": bin_size,
+                              "center": center,
+                              "prob": prob,
+                              "weibull": weibull,
+                              "weibull_params": weibull_params
+                              }
 
-            temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], indizes=list(df_filt.index), result=histo_data, angle_name=angle.name,
-                           colnames={'x': x.name})
-            Data_Out.append(temp)
+                temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], indizes=list(df_filt.index), result=histo_data, angle_name=angle.name,
+                               colnames={'x': x.name})
+                Data_Out.append(temp)
             num = num + 1
 
     return Data_Out
