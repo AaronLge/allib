@@ -1642,7 +1642,7 @@ def run_JBOOST(path_exe, proj_name, Hs, Tp, gamma):
     # Run JBOOST
     # subprocess.check_call(['JBOOST.exe', proj_name],
     #                       cwd=path_exe, shell=True)
-    run_subprocess(['JBOOST.exe', proj_name], cwd=path_exe, refresh_time=100, shell=True)
+    run_subprocess(['JBOOST.exe', proj_name], cwd=path_exe, refresh_time=1, shell=True)
 
     # import points of Database
     temp, debug = import_JBOOST(path_exe + 'Results_JBOOST_Text/JBOOST.out')

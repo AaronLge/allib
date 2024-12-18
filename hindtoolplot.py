@@ -78,6 +78,7 @@ class Scatter:
         self.marker = marker
         self.cbar_extraticks = cbar_extraticks
 
+
 class Tile:
     def __init__(self, num, errorbar=None, bar=None, textbox=None, lines=None, scatter=None, title=None, x_label=None, y_label=None, grid=None, x_lim=(None, None),
                  y_lim=(None, None), x_norm='lin', y_norm='lin', spinecolor_left=None, spinecolor_right=None, y_label_right=None, legend='auto', legend_loc="lower right",
@@ -224,6 +225,7 @@ class ErrorBar:
         self.yy_side = yy_side
         self.zorder = zorder
 # %% functions
+
 
 def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_title=10, fontsize_legend=6, fontsize_label=8, fontsize_ticks=8, grid=None, scatter_max='auto',
                scatter_min='auto', use_pgf=False, max_margins=None, min_margins=None, fill_page=False):

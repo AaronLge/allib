@@ -9,7 +9,6 @@ import shutil
 import chardet
 import hashlib
 
-
 from allib import general as gl
 
 
@@ -69,6 +68,7 @@ class Calculation:
         load_from_db(self, column_names=None, applie_filt=True, colnames_ini=False, indizes=None):
             Loads a dataframe from the SQL database, optionally applying filters and selecting specific indices.
     """
+
     def __init__(self, result=None, basedata=None, filters=None):
         """
         Initializes the Calculation instance with optional result, basedata, and filters.
@@ -105,12 +105,23 @@ class Calculation:
 
         timeframe = kwargs.get('timeframe', None)
         indizes = kwargs.get('indizes', None)
-
         df = gl.export_df_from_sql(db_path, table_name, column_names=colnames)
         df.index = pd.to_datetime(df.index)
 
         if timeframe is not None:
-            df = df.loc[timeframe[0]:timeframe[1]]
+
+            if timeframe[0] is None:
+                time_start = df.index[0]
+            else:
+                time_start = timeframe[0]
+
+            if timeframe[1] is None:
+                time_end = df.index[-1]
+            else:
+                time_end = timeframe[1]
+
+            df = df.loc[time_start:time_end]
+
             if len(df) == 0:
                 print("   no data found in timeframe")
                 return
@@ -212,7 +223,7 @@ class Calculation:
                 datetime_lists = [filt["indizes_in"] for filt in self.filters]
             else:
                 datetime_lists = [filt["indizes_in"] for filt in self.filters]
-                datetime_lists = [datetime_lists[i] for i in range(len(datetime_lists)) if i+1 in apply_only]
+                datetime_lists = [datetime_lists[i] for i in range(len(datetime_lists)) if i + 1 in apply_only]
 
             if datetime_lists:
                 common_dates = set(datetime_lists[0])
@@ -332,7 +343,6 @@ class Calculation:
 
 def percentiles(df, percent: list):
     for n_perc, perc in enumerate(percent):
-
         df[f'{perc}th percentile'] = np.percentile(df['mean'], perc)
     return
 
@@ -349,7 +359,6 @@ def condensation(x, y, grid,
                  average_correction=1.0,
                  avrg_method='mean',
                  make_monotone=False):
-
     # Set default values if None is passed
     zone_reg = zone_reg if zone_reg is not None else [None, None]
     zone_line = zone_line if zone_line is not None else [None, None]
@@ -386,7 +395,7 @@ def condensation(x, y, grid,
     for perc_curr in perc:
         perc_data_curr = pd.Series(index=x_bins, name=f"{perc_curr} percentile")
         for curr_ident in np.unique(bin_ident):
-            perc_data_curr.iloc[curr_ident-1] = np.percentile(y.iloc[np.where(bin_ident == curr_ident)], perc_curr)
+            perc_data_curr.iloc[curr_ident - 1] = np.percentile(y.iloc[np.where(bin_ident == curr_ident)], perc_curr)
 
         percentiles.append(perc_data_curr)
 
@@ -400,7 +409,6 @@ def condensation(x, y, grid,
 
     plot_line = (x_bins > zone_line[0]) & (
             x_bins < zone_line[1])
-
 
     # make monoton
     if make_monotone:
@@ -436,7 +444,6 @@ def condensation(x, y, grid,
     # regressionsbereich
 
     reg_zone = (x_bins > zone_reg[0]) & (x_bins < zone_reg[1])
-
 
     combined = []
     regression = []
@@ -719,40 +726,40 @@ def Weibull_fit(Data_Sec, Input):
 
 def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
     """
-    Calculates vm_specific and added damage Equivalent Loads (DELs) based on input time series data and metadata.
+    Compute normalized and weighted Damage Equivalent Loads (DELs) using wave and velocity data.
 
     Parameters
     ----------
     v_m : array-like
-        A sequence of velocities or other indexing variables for the resulting DataFrame.
+        Sequence of velocities or another variable used as the index for the resulting DataFrame.
     H_s : array-like
-        Significant wave height data, with NaN values indicating missing data.
+        Significant wave height data, with NaN values indicating missing or invalid data.
     T_p : array-like
-        Peak period data corresponding to `H_s`, with NaN values for missing data.
+        Peak period data corresponding to `H_s`, with NaN values for missing entries.
     gamma : float or None
-        Shape parameter for the wave spectrum. Defaults to 3.3 if not provided.
+        Shape parameter for the wave spectrum. Defaults to 3.3 if None is provided.
     count : array-like
-        Number of occurrences or counts for each event in the input data.
+        Count or frequency of occurrences for each event in the input data.
     proj_path : str
-        Path to the project directory containing necessary metadata files.
+        Path to the project directory containing metadata required for DEL normalization.
     exe_path : str
-        Path to the executable required for processing data with `run_JBOOST`.
+        Path to the executable used by `run_JBOOST` for DEL computation.
 
     Returns
     -------
     Table : pandas.DataFrame
-        DataFrame with normalized DEL values for each velocity in `v_m` and wave spectrum data.
-        Includes a "count" column corresponding to the input `count`.
+        DataFrame containing DEL values normalized by the S-N curve for each velocity in `v_m`.
+        Includes a "count" column with the input count values.
     Added : pandas.DataFrame
-        DataFrame containing weighted and normalized DEL values for each column.
+        DataFrame with total weighted and normalized DEL values for each scenario.
 
     Notes
     -----
-    - The function handles missing data (NaN values) in `H_s` and processes only valid entries.
-    - Uses the `run_JBOOST` function to compute raw DEL values and the `read_lua_values` function
-      to extract metadata like design life, reference cycles (N_ref), and the S-N slope.
-    - DEL normalization is performed using the metadata and provided count data.
-    - The resulting DELs are scaled and normalized according to the S-N curve slope and reference cycles.
+    - Handles missing data (`NaN` values) in `H_s` and processes only valid entries.
+    - Utilizes the `run_JBOOST` function to calculate raw DEL values.
+    - Reads metadata such as design life, reference cycles (N_ref), and S-N slope from the project directory.
+    - Normalization and weighting of DEL values are performed based on the S-N curve parameters and event counts.
+    - Outputs normalized DELs as `Table` and the summed normalized DELs as `Added`.
     """
     Table = pd.DataFrame(index=v_m)
     Added = pd.DataFrame()
@@ -765,9 +772,9 @@ def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
     proj_name = os.path.basename(proj_path)
 
     DEL_raw = gl.run_JBOOST(exe_path, proj_name, H_s[~isnan], T_p[~isnan], gamma)
-    Meta_data = gl.read_lua_values(proj_path, ["design_life", "N_ref", "SN_slope"])
 
-    skal_time = (Meta_data["design_life"] * 365.25 * 24)
+    count_ges = np.sum(count)
+    SN_slope = gl.read_lua_values(proj_path, ["SN_slope"])["SN_slope"]
 
     for col in DEL_raw.columns:
 
@@ -775,20 +782,20 @@ def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
         weighted = []
 
         for DEl_curr, count_curr in zip(DEL_raw[col], count[~isnan]):
-            # calculation DEL from count
-            DEL_weigted = (DEl_curr ** Meta_data["SN_slope"] * Meta_data["N_ref"]) / skal_time * count_curr
+            DEL_weigted = (DEl_curr ** SN_slope) * count_curr / count_ges
 
-            # including N_ref and SN-slope
-            DEL_normalised = (DEL_weigted / Meta_data["N_ref"]) ** (1 / Meta_data["SN_slope"])
+            DEL_normalised = DEL_weigted ** (1 / SN_slope)
 
             vm_vise.append(DEL_normalised)
+
             weighted.append(DEL_weigted)
 
         Table[col] = 0
         Table[col] = Table[col].astype(float)
+
         Table.loc[isnan.values == False, col] = vm_vise
-        Added[col] = pd.Series((np.nansum(weighted) / Meta_data["N_ref"]) ** (
-                1 / Meta_data["SN_slope"]))
+
+        Added[col] = pd.Series((np.nansum(weighted)) ** (1 / SN_slope))
 
     Table["count"] = count
     Table.index = v_m
@@ -796,22 +803,18 @@ def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
     return Table, Added
 
 
-def DEL_points(DEL, v_m, v_m_edges, design_life, N_ref, SN_slope):
+def DEL_points(DEL, v_m, v_m_edges, SN_slope):
     """
-    Compute Damage Equivalent Loads (DELs) binned by velocity and normalized using S-N curve parameters.
+    Compute binned and normalized Damage Equivalent Loads (DELs) based on velocity bins and S-N curve parameters.
 
     Parameters
     ----------
     DEL : pandas.DataFrame
-        Raw DEL values for each condition, with columns representing different DEL scenarios.
+        Raw DEL values for each condition, with columns representing different scenarios.
     v_m : array-like
-        Velocity or other continuous variable used for binning.
+        Velocity or continuous variable for binning DEL values.
     v_m_edges : array-like
-        Edges of the velocity bins. Must be one element longer than the number of bins.
-    design_life : float
-        Design life in years, used to scale the DEL calculations.
-    N_ref : float
-        Reference number of cycles for the S-N curve.
+        Edges of velocity bins, with length equal to the number of bins + 1.
     SN_slope : float
         Slope of the S-N curve, used for normalizing DEL values.
 
@@ -819,23 +822,21 @@ def DEL_points(DEL, v_m, v_m_edges, design_life, N_ref, SN_slope):
     -------
     Table : pandas.DataFrame
         DataFrame containing binned and normalized DEL values for each scenario in `DEL`.
-        Includes a "count" column representing the number of data points in each bin.
+        Includes a "count" column with the number of data points in each bin.
     Added : pandas.DataFrame
-        DataFrame containing total normalized DEL values across all bins for each scenario.
+        DataFrame with total normalized DEL values across all bins for each scenario.
 
     Notes
     -----
-    - Bins the `DEL` values by `v_m` according to the provided `v_m_edges`.
-    - The `count` column in `Table` indicates the number of `v_m` entries in each bin.
-    - DEL values are normalized using the design life, S-N curve slope, and reference cycles.
-    - The midpoints of the velocity bins are used as the index for `Table`.
-
+    - Bins the `DEL` values by `v_m` based on `v_m_edges`.
+    - Normalization uses the total number of points and S-N curve slope.
+    - The index of `Table` represents the midpoints of the velocity bins.
     """
     Table = pd.DataFrame()
     Added = pd.DataFrame()
 
     count, _, bin_id = sc.stats.binned_statistic(v_m, v_m, statistic='count', bins=v_m_edges)
-    skal_time = (design_life * 365.25 * 24)
+    count_ges = np.sum(count)
 
     for col in DEL.columns:
 
@@ -846,16 +847,11 @@ def DEL_points(DEL, v_m, v_m_edges, design_life, N_ref, SN_slope):
         for n_v_bin in range(1, len(v_m_edges)):
             DEL_curr_vm_sec = DEL_curr.loc[bin_id == n_v_bin]
 
-            # calculation DEL from count
-            temp = (DEL_curr_vm_sec ** SN_slope * N_ref) / skal_time
-
-            # including N_ref and SN-slope
-            DEL_normalised = (np.nansum(temp) / N_ref) ** (1 / SN_slope)
+            DEL_normalised = (np.nansum((DEL_curr_vm_sec ** SN_slope)) / count_ges) ** (1 / SN_slope)
 
             vm_vise.append(DEL_normalised)
 
-        added = (np.nansum((DEL_curr.values ** SN_slope * N_ref) / skal_time) / N_ref) ** (
-                1 / SN_slope)
+        added = (np.nansum((DEL_curr.values ** SN_slope)) / count_ges) ** (1 / SN_slope)
 
         Table[col] = vm_vise
         Added[col] = pd.Series(added)
@@ -868,6 +864,7 @@ def DEL_points(DEL, v_m, v_m_edges, design_life, N_ref, SN_slope):
     Table.index = v_m_mids
 
     return Table, Added
+
 
 def histogramm(x, x_max=None, x_min=None, auto_size=True, bin_size=None):
     bin_size_soll = bin_size
@@ -949,7 +946,6 @@ def cross_correlation(VM_grid, HS_values, HS_grid, TP_values, fill_range=None):
     Vm_res, TP_res: numpy arrays containing the new correlation
     """
 
-
     is_data_HSTP = ~np.isnan(HS_grid)
 
     TP_res = np.empty(len(TP_values))
@@ -1014,7 +1010,6 @@ def cross_correlation(VM_grid, HS_values, HS_grid, TP_values, fill_range=None):
 
 
 def extreme_contures_blackbox(Hs, Tp, T_return):
-
     def DVN_steepness(df, h, t, periods, interval):
         import scipy.stats as stats
         ## steepness
@@ -1067,6 +1062,7 @@ def extreme_contures_blackbox(Hs, Tp, T_return):
         t_steepness = np.asarray(t1 + t2 + t3)
 
         return t_steepness, h_steepness
+
     def Weibull_method_of_moment(X):
         import scipy.stats as stats
         X = X + 0.0001;
@@ -1335,7 +1331,7 @@ def extreme_contures_blackbox(Hs, Tp, T_return):
         y = 0.005 + b2 * np.exp(-x * b3)
         return y
 
-    df = pd.concat((Hs,Tp), axis=1)
+    df = pd.concat((Hs, Tp), axis=1)
 
     a1, a2, a3, b1, b2, b3, pdf_Hs, h, t3, h3, X, hs_tpl_tph = joint_distribution_Hs_Tp(df, var_hs=Hs.name, var_tp=Tp.name, periods=T_return)
 
@@ -1363,8 +1359,6 @@ def extreme_contures_blackbox(Hs, Tp, T_return):
         out[f"{X[i]} years"]["y"] = t3[i]
 
     return out
-
-
 
 
 # %% macro functions
@@ -1417,7 +1411,6 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
     zone_reg = zone_reg if zone_reg is not None else [None, None]
     zone_line = zone_line if zone_line is not None else [None, None]
 
-
     Data_Out = []
     grid = np.linspace(0, max(Vm), N_grid + 1)
 
@@ -1425,16 +1418,16 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
         # omni
         df = pd.concat([Vm, Hs], axis=1)
         VMHS_DATA, Coeffs = condensation(df[Vm.name], df[Hs.name], grid,
-                                 reg_model=model_reg,
-                                 deg_reg=deg_reg,
-                                 cut_reg=cut_reg,
-                                 reg_weighting=weighting_reg,
-                                 zone_reg=zone_reg.copy(),  # Pass the list directly
-                                 zone_line=zone_line.copy(),  # Pass the list directly
-                                 bin_min=bin_min,
-                                 average_correction=average_correction,
-                                 avrg_method=avrg_method,
-                                 make_monotone=make_monotone)
+                                         reg_model=model_reg,
+                                         deg_reg=deg_reg,
+                                         cut_reg=cut_reg,
+                                         reg_weighting=weighting_reg,
+                                         zone_reg=zone_reg.copy(),  # Pass the list directly
+                                         zone_line=zone_line.copy(),  # Pass the list directly
+                                         bin_min=bin_min,
+                                         average_correction=average_correction,
+                                         avrg_method=avrg_method,
+                                         make_monotone=make_monotone)
 
         temp = Segment(0, angles=None,
                        result={'data': VMHS_DATA, 'coeffs': Coeffs},
@@ -1454,16 +1447,16 @@ def calc_VMHS(Vm, Hs, angle, angle_grid,
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
             if len(df_filt) > N_segment_min:
                 VMHS_DATA, Coeffs = condensation(df_filt[Vm.name], df_filt[Hs.name], grid,
-                                         deg_reg=deg_reg,
-                                         reg_model=model_reg,
-                                         cut_reg=cut_reg,
-                                         reg_weighting=weighting_reg,
-                                         zone_reg=zone_reg.copy(),
-                                         zone_line=zone_line.copy(),
-                                         bin_min=bin_min,
-                                         average_correction=average_correction,
-                                         avrg_method=avrg_method,
-                                         make_monotone=make_monotone)
+                                                 deg_reg=deg_reg,
+                                                 reg_model=model_reg,
+                                                 cut_reg=cut_reg,
+                                                 reg_weighting=weighting_reg,
+                                                 zone_reg=zone_reg.copy(),
+                                                 zone_line=zone_line.copy(),
+                                                 bin_min=bin_min,
+                                                 average_correction=average_correction,
+                                                 avrg_method=avrg_method,
+                                                 make_monotone=make_monotone)
 
                 temp = Segment(num,
                                angles=[angle_segment[0],
@@ -1526,17 +1519,17 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, N_segment_min=0, **kwargs):
     if angle_grid is None:
         # omni
         Table_cond, Coeffs = condensation(Hs, Tp, grid,
-                                  deg_reg=deg_reg,
-                                  reg_model=model_reg,
-                                  cut_reg=cut_reg,
-                                  reg_weighting=weighting_reg,
-                                  zone_reg=zone_reg.copy(),
-                                  zone_line=zone_line.copy(),
-                                  bin_min=bin_min,
-                                  perc=perc,
-                                  avrg_method=avrg_method,
-                                  make_monotone=make_monotone
-                                  )
+                                          deg_reg=deg_reg,
+                                          reg_model=model_reg,
+                                          cut_reg=cut_reg,
+                                          reg_weighting=weighting_reg,
+                                          zone_reg=zone_reg.copy(),
+                                          zone_line=zone_line.copy(),
+                                          bin_min=bin_min,
+                                          perc=perc,
+                                          avrg_method=avrg_method,
+                                          make_monotone=make_monotone
+                                          )
 
         if quantile:
 
@@ -1563,17 +1556,17 @@ def calc_HSTP(Hs, Tp, angle, angle_grid, N_segment_min=0, **kwargs):
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
             if len(df_filt) > N_segment_min:
                 Table_cond, Coeffs = condensation(df_filt[Hs.name], df_filt[Tp.name], grid,
-                                          deg_reg=deg_reg,
-                                          reg_model=model_reg,
-                                          cut_reg=cut_reg,
-                                          reg_weighting=weighting_reg,
-                                          zone_reg=zone_reg.copy(),
-                                          zone_line=zone_line.copy(),
-                                          bin_min=bin_min,
-                                          perc=perc,
-                                          avrg_method=avrg_method,
-                                          make_monotone=make_monotone
-                                          )
+                                                  deg_reg=deg_reg,
+                                                  reg_model=model_reg,
+                                                  cut_reg=cut_reg,
+                                                  reg_weighting=weighting_reg,
+                                                  zone_reg=zone_reg.copy(),
+                                                  zone_line=zone_line.copy(),
+                                                  bin_min=bin_min,
+                                                  perc=perc,
+                                                  avrg_method=avrg_method,
+                                                  make_monotone=make_monotone
+                                                  )
 
                 if quantile:
 
@@ -1648,7 +1641,8 @@ def calc_VMTP(vmhs, hstp, vm_points=None, fill_range=False):
         vmtp_curr_data['iscondensation'] = False
         vmtp_curr_data['iscondensation'] = ~np.isnan(Vm_res)
 
-        vmtp_curr = Segment(num, result={'data': vmtp_curr_data}, colnames={'x': vmhs_curr.colnames['x'], 'y': hstp_curr.colnames['y']}, angle_name=vmhs_curr.angle_name, angles=vmhs_curr.angles, indizes=vmhs_curr.indizes)
+        vmtp_curr = Segment(num, result={'data': vmtp_curr_data}, colnames={'x': vmhs_curr.colnames['x'], 'y': hstp_curr.colnames['y']}, angle_name=vmhs_curr.angle_name,
+                            angles=vmhs_curr.angles, indizes=vmhs_curr.indizes)
 
         VMTP.append(vmtp_curr)
         num = num + 1
@@ -1673,7 +1667,7 @@ def calc_Roseplot(angle, magnitude, angle_segments):
     return counts, r_edges
 
 
-def calc_RWI(Hs, Tp, angle, angle_grid, f_0, gamma_mode='default',N_segment_min=0):
+def calc_RWI(Hs, Tp, angle, angle_grid, f_0, gamma_mode='default', N_segment_min=0):
     """retruns list of RWI segment objects for all segments in angle_grid, if angle_grid is None, omnidirectional is returned
 
     Arguments:
@@ -1706,25 +1700,25 @@ def calc_RWI(Hs, Tp, angle, angle_grid, f_0, gamma_mode='default',N_segment_min=
         TP_max = Tp[RWI_list == RWI_max]
 
     else:
-            df = pd.concat([Hs, Tp, angle], axis=1)
+        df = pd.concat([Hs, Tp, angle], axis=1)
 
-            for num, angle_segment in enumerate(angle_grid):
+        for num, angle_segment in enumerate(angle_grid):
 
-                df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
-                if len(df_filt) > N_segment_min:
+            df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
+            if len(df_filt) > N_segment_min:
 
-                    RWI_list = RWI(df_filt[Hs.name], df_filt[Tp.name], f_0, gamma_mode=gamma_mode)
+                RWI_list = RWI(df_filt[Hs.name], df_filt[Tp.name], f_0, gamma_mode=gamma_mode)
 
-                    RWI_df = pd.DataFrame(RWI_list, index=df_filt[Hs.name].index)
+                RWI_df = pd.DataFrame(RWI_list, index=df_filt[Hs.name].index)
 
-                    temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], result=RWI_df, colnames={'x': Hs.name, 'y': Tp.name}, angle_name=angle.name,
-                                   indizes=list(df_filt[Hs.name].index))
-                    Data_Out.append(temp)
+                temp = Segment(num, angles=[angle_segment[0], angle_segment[1]], result=RWI_df, colnames={'x': Hs.name, 'y': Tp.name}, angle_name=angle.name,
+                               indizes=list(df_filt[Hs.name].index))
+                Data_Out.append(temp)
 
-                    if max(RWI_list) > RWI_max:
-                        RWI_max = max(RWI_list)
-                        HS_max = df_filt[Hs.name][RWI_list == RWI_max]
-                        TP_max = df_filt[Tp.name][RWI_list == RWI_max]
+                if max(RWI_list) > RWI_max:
+                    RWI_max = max(RWI_list)
+                    HS_max = df_filt[Hs.name][RWI_list == RWI_max]
+                    TP_max = df_filt[Tp.name][RWI_list == RWI_max]
 
     return Data_Out, {'RWI_max': RWI_max, 'HS_max': HS_max, 'TP_max': TP_max}
 
@@ -1796,7 +1790,7 @@ def calc_tables(vmhs, vm_grid, vm_data):
         #                vm_step / 2, Vm_table_center[spanned_isdata_table].iloc[-1] + vm_step / 2]
 
         #set <0 to nan
-        HS[HS<0] = float('nan')
+        HS[HS < 0] = float('nan')
 
         result = pd.DataFrame()
 
@@ -1914,7 +1908,6 @@ def calc_WaveBreak_Steep(Hs, Tp, angle, angle_grid, steep_crit, d, N_segment_min
 
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
             if len(df_filt) > N_segment_min:
-
                 break_steep_bool_list, lamda_list, steepness = WaveBreak_steep(df_filt[Hs.name], df_filt[Tp.name], d, steep_crit)
                 break_steep_bool = pd.Series(break_steep_bool_list, name='bool_break')
                 lamda = pd.Series(lamda_list, name='lamda')
@@ -2019,7 +2012,7 @@ def calc_ExtemeValues(x, angles, angle_grid, T_return_single=None, conf_inter_mo
                                freq_samp=freq_samp,
                                N_itter=N_itter)
 
-        temp = Segment(0, angles=None, result=result, colnames={'x': x.name, 'angle':  None}, angle_name=None, indizes=list(x.index))
+        temp = Segment(0, angles=None, result=result, colnames={'x': x.name, 'angle': None}, angle_name=None, indizes=list(x.index))
         Data_Out.append(temp)
 
     else:
@@ -2028,7 +2021,6 @@ def calc_ExtemeValues(x, angles, angle_grid, T_return_single=None, conf_inter_mo
             df_filt = gl.filter_dataframe(df, angles.name, angle_segment[0], angle_segment[1])
 
             if len(df_filt) > N_segment_min:
-
                 result = ExtremeValues(df_filt[x.name],
                                        intervall_mode=conf_inter_mode,
                                        intervall_algorithm=conf_inter_algorithm,
@@ -2107,49 +2099,49 @@ def update_DEL_db(db_path, Hs, Tp, gamma, proj_path=None, input_path=None, exe_p
             for line in lines
             if line.strip() and not line.strip().startswith("local")
         ]
-        processed_lines = [ line for line in processed_lines if len(line) > 0]
+        processed_lines = [line for line in processed_lines if len(line) > 0]
         combined_string = ''.join(processed_lines)
         combined_string = combined_string.replace('\t', '')
         hash_value = hashlib.md5(combined_string.encode()).hexdigest()
 
     Meta_Curr = {
-                 'input_path': input_path,
-                 'input_hash': hash_value,
-                 "d": -Var_lua["seabed_level"],
-                 "design_life": Var_lua["design_life"],
-                 "N_ref": Var_lua["N_ref"],
-                 "SN_slope": Var_lua["SN_slope"],
-                 "Hs": Hs.name,
-                 "Tp": Tp.name,
-                 "gamma": gamma.name,
-                 "foundation_superelement": Var_lua["foundation_superelement"],
-                 "found_stiff_trans": Var_lua["found_stiff_trans"],
-                 "found_stiff_rotat": Var_lua["found_stiff_rotat"],
-                 "found_stiff_coupl": Var_lua["found_stiff_coupl"],
-                 "found_mass_trans": Var_lua["found_mass_trans"],
-                 "found_mass_rotat": Var_lua["found_mass_rotat"],
-                 "found_mass_coupl": Var_lua["found_mass_coupl"],
-                 "shearCorr": Var_lua["shearCorr"],
-                 "res_NumEF": Var_lua["res_NumEF"],
-                 "hydro_add_mass": Var_lua["hydro_add_mass"],
-                 "water_density": Var_lua["water_density"],
-                 "water_level": Var_lua["water_level"],
-                 "seabed_level": Var_lua["seabed_level"],
-                 "growth_density": Var_lua["growth_density"],
-                 "frequRange": Var_lua["frequRange"],
-                 "frequRangeSolution": Var_lua["frequRangeSolution"],
-                 "maxEFcalc": Var_lua["maxEFcalc"],
-                 "damping_struct": Var_lua["damping_struct"],
-                 "damping_tower": Var_lua["damping_tower"],
-                 "damping_aerodyn": Var_lua["damping_aerodyn"],
-                 "tech_availability": Var_lua["tech_availability"],
-                 "h_refwindspeed": Var_lua["h_refwindspeed"],
-                 "h_hub": Var_lua["h_hub"],
-                 "height_exp": Var_lua["height_exp"],
-                 "TM02_period": Var_lua["TM02_period"],
-                 "refineScatter": Var_lua["refineScatter"],
-                 "fullScatter": Var_lua["fullScatter"],
-                 "WindspecDataBase": Var_lua["WindspecDataBase"]}
+        'input_path': input_path,
+        'input_hash': hash_value,
+        "d": -Var_lua["seabed_level"],
+        "design_life": Var_lua["design_life"],
+        "N_ref": Var_lua["N_ref"],
+        "SN_slope": Var_lua["SN_slope"],
+        "Hs": Hs.name,
+        "Tp": Tp.name,
+        "gamma": gamma.name,
+        "foundation_superelement": Var_lua["foundation_superelement"],
+        "found_stiff_trans": Var_lua["found_stiff_trans"],
+        "found_stiff_rotat": Var_lua["found_stiff_rotat"],
+        "found_stiff_coupl": Var_lua["found_stiff_coupl"],
+        "found_mass_trans": Var_lua["found_mass_trans"],
+        "found_mass_rotat": Var_lua["found_mass_rotat"],
+        "found_mass_coupl": Var_lua["found_mass_coupl"],
+        "shearCorr": Var_lua["shearCorr"],
+        "res_NumEF": Var_lua["res_NumEF"],
+        "hydro_add_mass": Var_lua["hydro_add_mass"],
+        "water_density": Var_lua["water_density"],
+        "water_level": Var_lua["water_level"],
+        "seabed_level": Var_lua["seabed_level"],
+        "growth_density": Var_lua["growth_density"],
+        "frequRange": Var_lua["frequRange"],
+        "frequRangeSolution": Var_lua["frequRangeSolution"],
+        "maxEFcalc": Var_lua["maxEFcalc"],
+        "damping_struct": Var_lua["damping_struct"],
+        "damping_tower": Var_lua["damping_tower"],
+        "damping_aerodyn": Var_lua["damping_aerodyn"],
+        "tech_availability": Var_lua["tech_availability"],
+        "h_refwindspeed": Var_lua["h_refwindspeed"],
+        "h_hub": Var_lua["h_hub"],
+        "height_exp": Var_lua["height_exp"],
+        "TM02_period": Var_lua["TM02_period"],
+        "refineScatter": Var_lua["refineScatter"],
+        "fullScatter": Var_lua["fullScatter"],
+        "WindspecDataBase": Var_lua["WindspecDataBase"]}
 
     print(f'   used variables from {proj_path}:')
     print(f"   {gl.write_dict(Var_lua)}")
@@ -2323,7 +2315,7 @@ def calc_Validation(df_DEL, Vm, angle, vmhs_table, vmtp_table, proj_path, input_
         v_m_edges = [vm_curr[0] for vm_curr in vmhs_curr.result["vm_edges"].values]
         v_m_edges.append(vmhs_curr.result["vm_edges"].values[-1][1])
 
-        table_points, added_points = DEL_points(df_DEL.loc[id_filt], Vm.loc[id_filt], v_m_edges, Meta_data["design_life"], Meta_data["N_ref"], Meta_data["SN_slope"])
+        table_points, added_points = DEL_points(df_DEL.loc[id_filt], Vm.loc[id_filt], v_m_edges, Meta_data["SN_slope"])
 
         out = {"condensed": {"vm_vise": table_condensed,
                              "added": added_condensed},
@@ -2410,7 +2402,6 @@ def calc_weibull(x, angle, angle_grid, N_segment_min=0):
             df = pd.concat([x, angle], axis=1)
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
             if len(df_filt) > N_segment_min:
-
                 bin_size, center, prob, weibull, weibull_params = weibull_fit(df_filt[x.name])
                 histo_data = {"bin_size": bin_size,
                               "center": center,
@@ -2447,7 +2438,6 @@ def calc_extreme_contures(Hs, Tp, angle, angle_grid, T_return):
         # Grid festlegen
 
         for angle_segment in angle_grid:
-
             df = pd.concat([Hs, Tp, angle], axis=1)
             df_filt = gl.filter_dataframe(df, angle.name, angle_segment[0], angle_segment[1])
 
@@ -2459,8 +2449,6 @@ def calc_extreme_contures(Hs, Tp, angle, angle_grid, T_return):
             num = num + 1
 
     return Data_Out
-
-
 
 # %% DataBaseHandling
 
