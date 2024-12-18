@@ -223,7 +223,7 @@ class Calculation:
                 datetime_lists = [filt["indizes_in"] for filt in self.filters]
             else:
                 datetime_lists = [filt["indizes_in"] for filt in self.filters]
-                datetime_lists = [datetime_lists[i] for i in range(len(datetime_lists)) if i + 1 in apply_only]
+                datetime_lists = [datetime_lists[i] for i in range(len(datetime_lists)) if i+1 in apply_only]
 
             if datetime_lists:
                 common_dates = set(datetime_lists[0])
@@ -444,6 +444,7 @@ def condensation(x, y, grid,
     # regressionsbereich
 
     reg_zone = (x_bins > zone_reg[0]) & (x_bins < zone_reg[1])
+
 
     combined = []
     regression = []
@@ -748,18 +749,18 @@ def DEl_Condensed(v_m, H_s, T_p, gamma, count, proj_path, exe_path):
     Returns
     -------
     Table : pandas.DataFrame
-        DataFrame containing DEL values normalized by the S-N curve for each velocity in `v_m`.
-        Includes a "count" column with the input count values.
+        DataFrame with normalized DEL values for each velocity in `v_m` and wave spectrum data.
+        Includes a "count" column corresponding to the input `count`.
     Added : pandas.DataFrame
-        DataFrame with total weighted and normalized DEL values for each scenario.
+        DataFrame containing weighted and normalized DEL values for each column.
 
     Notes
     -----
-    - Handles missing data (`NaN` values) in `H_s` and processes only valid entries.
-    - Utilizes the `run_JBOOST` function to calculate raw DEL values.
-    - Reads metadata such as design life, reference cycles (N_ref), and S-N slope from the project directory.
-    - Normalization and weighting of DEL values are performed based on the S-N curve parameters and event counts.
-    - Outputs normalized DELs as `Table` and the summed normalized DELs as `Added`.
+    - The function handles missing data (NaN values) in `H_s` and processes only valid entries.
+    - Uses the `run_JBOOST` function to compute raw DEL values and the `read_lua_values` function
+      to extract metadata like design life, reference cycles (N_ref), and the S-N slope.
+    - DEL normalization is performed using the metadata and provided count data.
+    - The resulting DELs are scaled and normalized according to the S-N curve slope and reference cycles.
     """
     Table = pd.DataFrame(index=v_m)
     Added = pd.DataFrame()

@@ -78,7 +78,6 @@ class Scatter:
         self.marker = marker
         self.cbar_extraticks = cbar_extraticks
 
-
 class Tile:
     def __init__(self, num, errorbar=None, bar=None, textbox=None, lines=None, scatter=None, title=None, x_label=None, y_label=None, grid=None, x_lim=(None, None),
                  y_lim=(None, None), x_norm='lin', y_norm='lin', spinecolor_left=None, spinecolor_right=None, y_label_right=None, legend='auto', legend_loc="lower right",
@@ -225,7 +224,6 @@ class ErrorBar:
         self.yy_side = yy_side
         self.zorder = zorder
 # %% functions
-
 
 def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_title=10, fontsize_legend=6, fontsize_label=8, fontsize_ticks=8, grid=None, scatter_max='auto',
                scatter_min='auto', use_pgf=False, max_margins=None, min_margins=None, fill_page=False):
@@ -440,14 +438,7 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
     # iteration pages
     for page, _ in enumerate(range(pages)):
 
-        if not fill_page and (page + 1) == pages:
-            N_tiles_last = N_exp - i
-            rows_required = np.ceil(N_tiles_last/grid[1])
-            tiles_page = int(rows_required * grid[1])
-            fig_skal = rows_required/grid[0]
-            fig, ax = plt.subplots(int(rows_required), grid[1], figsize=[figsize[0], figsize[1]*fig_skal])
-        else:
-            fig, ax = plt.subplots(grid[0], grid[1], figsize=figsize)
+        fig, ax = plt.subplots(grid[0], grid[1], figsize=figsize)
 
         if tiles_page != 1:
             ax_flat = ax.flatten()
@@ -624,7 +615,7 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
                                        color=line.color,
                                        label=line.label,
                                        alpha=line.alpha,
-                                       zorder=line.zorder)
+                                          zorder=line.zorder)
 
                     # ERRORBAR
                     for errorbar in Tile.errorbar:
@@ -651,31 +642,22 @@ def plot_tiled(Tiles, figsize=None, global_max=None, global_min=None, fontsize_t
 
                     # Lims
                     axis.margins(0)
-                    if Tile.x_lim[0] is not None:
-                        x_min_set = Tile.x_lim[0]
-                    elif x_min is not None:
+                    if x_min is not None:
                         x_min_set = x_min
                     else:
                         x_min_set = axis.get_xlim()[0]
 
-                    if Tile.x_lim[1] is not None:
-                        x_max_set = Tile.x_lim[1]
-                    elif x_max is not None:
+                    if x_max is not None:
                         x_max_set = x_max
                     else:
                         x_max_set = axis.get_xlim()[1]
 
-                    if Tile.y_lim[0] is not None:
-                        y_min_set = Tile.y_lim[0]
-                    elif y_min is not None:
+                    if y_min is not None:
                         y_min_set = y_min
-
                     else:
                         y_min_set = axis.get_ylim()[0]
 
-                    if Tile.y_lim[1] is not None:
-                        y_max_set = Tile.y_lim[1]
-                    elif y_max is not None:
+                    if y_max is not None:
                         y_max_set = y_max
                     else:
                         y_max_set = axis.get_ylim()[1]
